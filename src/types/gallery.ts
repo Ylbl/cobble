@@ -8,6 +8,8 @@ export type ArtifactStatus = "received" | "rendering" | "compiling" | "finished"
 
 export type ArtifactPreviewType = "large" | "small";
 
+export type LayoutSize = "small" | "medium" | "wide";
+
 export type SidebarMode = "groups" | "projects";
 
 export type GalleryView = {
