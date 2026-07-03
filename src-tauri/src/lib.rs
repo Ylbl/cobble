@@ -2,6 +2,7 @@ pub mod commands;
 pub mod gallery;
 pub mod logging;
 pub mod mcp;
+pub mod paths;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

@@ -11,6 +11,10 @@ node_modules
 dist
 dist-ssr
 *.local
+.sidecar-debug/
+src-tauri/debug-logs/
+src-tauri/debug-artifacts/
+src-tauri/debug-mcp/
 
 # Editor directories and files
 .vscode/*
