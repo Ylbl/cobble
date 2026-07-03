@@ -445,6 +445,16 @@ impl GalleryState {
                     }
                     prepared.push(item);
                 }
+                ArtifactInputKind::Svg => {
+                    let artifact_id = Uuid::new_v4().to_string();
+                    let item = self.prepare_svg_artifact(artifact, artifact_id, &now);
+                    if let Err(error) =
+                        image_cache::write_artifact_manifest(&self.app_paths, &item.id, &item).await
+                    {
+                        tracing::error!(target: "sidecar", ?error, artifact_id = %item.id, "failed to write artifact manifest");
+                    }
+                    prepared.push(item);
+                }
                 _ => {
                     tracing::warn!(target: "sidecar", kind = ?artifact.kind, "unsupported artifact kind ignored");
                 }
@@ -553,6 +563,56 @@ impl GalleryState {
             latex_engine: None,
             compile_elapsed_ms: None,
             error_message: download.error_message.clone(),
+            created_at: now.to_string(),
+        }
+    }
+
+    fn prepare_svg_artifact(
+        &self,
+        artifact: &ArtifactInput,
+        artifact_id: String,
+        now: &str,
+    ) -> ArtifactItem {
+        let svg_content = artifact.svg.clone().filter(|s| !s.trim().is_empty());
+        let (status, error_message) = match &svg_content {
+            Some(_) => (ArtifactStatus::Finished, None),
+            None => (
+                ArtifactStatus::Failed,
+                Some("svg artifact requires svg content".to_string()),
+            ),
+        };
+
+        tracing::info!(
+            target: "sidecar",
+            artifact_id = %artifact_id,
+            ?status,
+            svg_chars = svg_content.as_ref().map(|s| s.chars().count()).unwrap_or(0),
+            "svg artifact prepared"
+        );
+
+        ArtifactItem {
+            id: artifact_id,
+            title: artifact.title.clone(),
+            kind: ArtifactKind::Svg,
+            status,
+            image_url: None,
+            local_file_path: None,
+            asset_url: None,
+            pdf_url: None,
+            pdf_local_file_path: None,
+            pdf_asset_url: None,
+            log_file_path: None,
+            stdout_path: None,
+            stderr_path: None,
+            svg: svg_content,
+            latex_code: None,
+            source_file_path: None,
+            source_text: None,
+            mime_type: Some("image/svg+xml".to_string()),
+            file_extension: Some("svg".to_string()),
+            latex_engine: None,
+            compile_elapsed_ms: None,
+            error_message,
             created_at: now.to_string(),
         }
     }
