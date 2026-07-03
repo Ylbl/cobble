@@ -1,12 +1,25 @@
-use std::{fs, net::SocketAddr};
+use std::{
+    fs,
+    net::SocketAddr,
+    sync::Arc,
+};
 
+use axum::{
+    body::Body,
+    extract::Request,
+    http::StatusCode,
+    response::Response,
+};
+use http::HeaderName;
+use http_body_util::BodyExt;
 use rmcp::transport::streamable_http_server::{
     session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
 };
 use serde::Serialize;
 use tauri::{Emitter, Manager};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
+use tower::Service;
 
 use crate::{app_paths::AppPaths, mcp::tools::SidecarMcpService, settings::state::ConfigState};
 
@@ -69,6 +82,8 @@ struct McpServerStatusFile<'a> {
     pid: u32,
     version: &'a str,
 }
+
+type McpService = StreamableHttpService<SidecarMcpService, LocalSessionManager>;
 
 pub async fn start(app: tauri::AppHandle) -> anyhow::Result<McpServerStatus> {
     start_or_restart(app, false).await
@@ -135,18 +150,30 @@ async fn start_or_restart(
         *state.cancellation_token.write().await = Some(cancellation_token.clone());
     }
 
-    let service: StreamableHttpService<SidecarMcpService, LocalSessionManager> =
-        StreamableHttpService::new(
-            {
-                let app = app.clone();
-                move || Ok(SidecarMcpService::new(app.clone()))
-            },
-            Default::default(),
-            StreamableHttpServerConfig::default()
-                .with_sse_keep_alive(None)
-                .with_cancellation_token(cancellation_token.child_token()),
-        );
-    let router = axum::Router::new().nest_service("/mcp", service);
+    let mcp_service = StreamableHttpService::new(
+        {
+            let app = app.clone();
+            move || Ok(SidecarMcpService::new(app.clone()))
+        },
+        Default::default(),
+        StreamableHttpServerConfig::default()
+            .with_sse_keep_alive(None)
+            .with_cancellation_token(cancellation_token.child_token()),
+    );
+
+    let mcp_service = Arc::new(Mutex::new(mcp_service));
+
+    // Wrapper that catches "Session not found" 404 and retries
+    // without the stale session header, transparently auto-creating a new session.
+    let router = axum::Router::new().fallback_service(
+        tower::service_fn({
+            let mcp_service = mcp_service.clone();
+            move |req: Request<Body>| {
+                let mcp_service = mcp_service.clone();
+                async move { Ok(serve_mcp_with_recovery(mcp_service, req).await) }
+            }
+        }),
+    );
 
     let status = McpServerStatus {
         running: true,
@@ -177,6 +204,152 @@ async fn start_or_restart(
     });
 
     Ok(status)
+}
+
+const MCP_SESSION_ID: &str = "mcp-session-id";
+
+/// Wraps the MCP service: on 404 "Session not found", strips the
+/// Mcp-Session-Id header and retries, auto-creating a new session.
+async fn serve_mcp_with_recovery(
+    mcp_service: Arc<Mutex<McpService>>,
+    req: Request<Body>,
+) -> Response<Body> {
+    let had_session = req
+        .headers()
+        .get(MCP_SESSION_ID)
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+
+    // Buffer the body so we can replay it on retry
+    let (parts, body) = req.into_parts();
+    let body_bytes = body
+        .collect()
+        .await
+        .map(|collected| collected.to_bytes())
+        .unwrap_or_default();
+
+    let req1 = Request::from_parts(parts.clone(), Body::from(body_bytes.clone()));
+    let resp = {
+        let mut svc = mcp_service.lock().await;
+        let raw = match svc.call(req1).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!(target: "sidecar", ?e, "MCP service error");
+                return Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::empty())
+                    .unwrap();
+            }
+        };
+        mcp_response_to_body(raw).await
+    };
+
+    // If got 404 and had a session header, we need to:
+    // 1. Create a new session via initialize
+    // 2. Replay the original request with the new session ID
+    if resp.status() == StatusCode::NOT_FOUND && had_session {
+        let mut new_parts = parts.clone();
+        new_parts.headers.remove(MCP_SESSION_ID);
+
+        // Extract protocol version from original request headers (ZCode sends MCP-Protocol-Version)
+        let proto_version = parts
+            .headers
+            .get("MCP-Protocol-Version")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("2025-11-25")
+            .to_string();
+
+        // Step 1: send initialize to create a proper MCP session
+        let init_body = Body::from(
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": proto_version,
+                    "capabilities": {},
+                    "clientInfo": { "name": "ZCode", "version": "1.0" }
+                },
+                "id": 0
+            })
+            .to_string(),
+        );
+        let mut init_req = Request::from_parts(new_parts.clone(), init_body);
+        // Copy protocol version header to initialize request
+        init_req.headers_mut().insert(
+            http::HeaderName::from_static("mcp-protocol-version"),
+            proto_version.parse().unwrap(),
+        );
+        let (init_session_id, mut new_parts) = {
+            let mut svc = mcp_service.lock().await;
+            let init_resp = match svc.call(init_req).await {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!(target: "sidecar", ?e, "MCP initialize failed during recovery");
+                    return Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .body(Body::empty())
+                        .unwrap();
+                }
+            };
+            // Extract session ID and consume response body (critical for rmcp state machine)
+            let sid = init_resp
+                .headers()
+                .get(MCP_SESSION_ID)
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
+            let (_parts, body) = init_resp.into_parts();
+            let _ = body.collect().await; // consume body to complete the response cycle
+
+            let mut p = new_parts;
+            if let Some(ref sid) = sid {
+                p.headers.insert(
+                    HeaderName::from_static(MCP_SESSION_ID),
+                    sid.parse().unwrap(),
+                );
+            }
+            // Copy Accept header from original request
+            if let Some(accept) = parts.headers.get("accept").cloned() {
+                p.headers.insert("accept", accept);
+            }
+            // Copy protocol version header
+            p.headers.insert(
+                http::HeaderName::from_static("mcp-protocol-version"),
+                proto_version.parse().unwrap(),
+            );
+            (sid, p)
+        };
+
+        let req2 = Request::from_parts(new_parts, Body::from(body_bytes));
+        let raw = {
+            let mut svc = mcp_service.lock().await;
+            match svc.call(req2).await {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!(target: "sidecar", ?e, "MCP replay failed after recovery");
+                    return Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .body(Body::empty())
+                        .unwrap();
+                }
+            }
+        };
+        return mcp_response_to_body(raw).await;
+    }
+
+    resp
+}
+
+/// Convert from `rmcp`'s `BoxBody` to axum's `Body`.
+async fn mcp_response_to_body(
+    resp: Response<http_body_util::combinators::BoxBody<axum::body::Bytes, std::convert::Infallible>>,
+) -> Response<Body> {
+    let (parts, body) = resp.into_parts();
+    let bytes = body
+        .collect()
+        .await
+        .map(|collected| collected.to_bytes())
+        .unwrap_or_default();
+    Response::from_parts(parts, Body::from(bytes))
 }
 
 async fn stop_current(app: &tauri::AppHandle) {
