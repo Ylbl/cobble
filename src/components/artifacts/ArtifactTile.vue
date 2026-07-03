@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, inject, reactive, ref, watch } from "vue";
 import SourceLogViewer from "./SourceLogViewer.vue";
 import PdfJsViewer from "../pdf/PdfJsViewer.vue";
 import { openPath } from "../../services/settingsService";
 import type { Artifact, LayoutSize } from "../../types/gallery";
+import { FLOW_WIDTH_KEY } from "./ArtifactFlowLayout.vue";
 
 const props = defineProps<{
   artifact: Artifact;
@@ -13,6 +14,8 @@ const props = defineProps<{
 defineEmits<{
   select: [];
 }>();
+
+const tileRef = ref<HTMLElement | null>(null);
 
 const menuOpen = ref(false);
 const menuPosition = ref({ x: 0, y: 0 });
@@ -63,12 +66,81 @@ const hasAnyPath = computed(
     Boolean(props.artifact.logFilePath),
 );
 
+// ---- Zoom (wheel scroll) ----
+const BASE_WIDTHS: Record<LayoutSize, number> = {
+  small: 180,
+  medium: 320,
+  wide: 480,
+};
+
+// Module-level store: per-artifact custom width (survives component remounts)
+const artifactWidthMap = reactive<Record<string, number>>({});
+
+const flowWidth = inject(FLOW_WIDTH_KEY, ref(600));
+
+function getBaseWidth(size: LayoutSize): number {
+  return BASE_WIDTHS[size] ?? 320;
+}
+
+function getCurrentWidth(): number {
+  return artifactWidthMap[props.artifact.id] ?? getBaseWidth(layoutSize.value);
+}
+
+function setCurrentWidth(w: number) {
+  artifactWidthMap[props.artifact.id] = w;
+}
+
+function getMaxWidthInRow(): number {
+  const tile = tileRef.value;
+  if (!tile) return getBaseWidth(layoutSize.value);
+
+  const flowEl = tile.closest(".artifact-flow") as HTMLElement | null;
+  if (!flowEl) return getBaseWidth(layoutSize.value);
+
+  const flowRect = flowEl.getBoundingClientRect();
+  const tileRect = tile.getBoundingClientRect();
+  const flowStyle = window.getComputedStyle(flowEl);
+  const paddingRight = parseFloat(flowStyle.paddingRight || "0");
+  const contentRight = flowRect.right - paddingRight;
+  const safetyGap = 4;
+
+  return Math.max(getBaseWidth(layoutSize.value), contentRight - tileRect.left - safetyGap);
+}
+
+const tileWidth = computed(() => getCurrentWidth());
+
+// Container resize: clamp down if tile now exceeds available space (never auto-expand)
+watch(flowWidth, () => {
+  const currentWidth = getCurrentWidth();
+  const maxWidth = getMaxWidthInRow();
+  const baseWidth = getBaseWidth(layoutSize.value);
+  if (currentWidth > maxWidth) {
+    setCurrentWidth(Math.max(baseWidth, maxWidth));
+  }
+});
+
+function onWheel(event: WheelEvent) {
+  event.preventDefault();
+  const step = 40;
+  const direction = event.deltaY < 0 ? 1 : -1;
+  const baseWidth = getBaseWidth(layoutSize.value);
+  const currentWidth = getCurrentWidth();
+  const maxWidth = getMaxWidthInRow();
+  const nextWidth = clamp(currentWidth + direction * step, baseWidth, Math.max(baseWidth, maxWidth));
+  setCurrentWidth(nextWidth);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(value, max));
+}
+
 // ---- Context menu ----
 function openContextMenu(event: MouseEvent) {
   event.preventDefault();
   menuPosition.value = { x: event.clientX, y: event.clientY };
   menuOpen.value = true;
 }
+
 
 function closeContextMenu() {
   menuOpen.value = false;
@@ -106,12 +178,15 @@ function parentPath(path: string) {
 
 <template>
   <article
+    ref="tileRef"
     class="artifact-tile"
     :class="[layoutSize, artifact.status, { selected }]"
+    :style="{ width: tileWidth + 'px' }"
     tabindex="0"
     @click="$emit('select')"
     @keydown.enter="$emit('select')"
     @contextmenu.prevent="openContextMenu"
+    @wheel.prevent="onWheel"
   >
     <div class="tile-surface">
       <!-- Image -->
@@ -225,31 +300,30 @@ function parentPath(path: string) {
 .artifact-tile {
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 6px;
   background: #1c1c1c;
   cursor: pointer;
   outline: none;
-  overflow: hidden;
   transition:
     border-color 140ms ease,
     background 140ms ease;
 }
 
-/* Width tiers */
+/* Width tiers — base widths controlled by JS zoom, CSS provides fallback */
 .artifact-tile.small {
-  flex: 0 0 180px;
-  max-width: 220px;
+  width: 180px;
 }
 
 .artifact-tile.medium {
-  flex: 0 0 320px;
-  max-width: 400px;
+  width: 320px;
 }
 
 .artifact-tile.wide {
-  flex: 0 0 480px;
-  max-width: 620px;
+  width: 480px;
 }
 
 .artifact-tile:hover,

@@ -1,26 +1,35 @@
+<script lang="ts">
+export const FLOW_WIDTH_KEY = Symbol("flowLayoutWidth");
+</script>
+
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from "vue";
+import { onBeforeUnmount, onMounted, provide, ref } from "vue";
 
 const containerRef = ref<HTMLElement | null>(null);
+const flowWidth = ref(600);
+
 let ro: ResizeObserver | null = null;
 
-function setupObserver() {
+function updateWidth() {
   if (!containerRef.value) return;
-  ro = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      const width = entry.contentRect.width;
-      containerRef.value?.style.setProperty("--flow-layout-width", `${width}px`);
-    }
-  });
-  ro.observe(containerRef.value);
+  const rect = containerRef.value.getBoundingClientRect();
+  flowWidth.value = rect.width;
 }
 
-setupObserver();
+onMounted(() => {
+  updateWidth();
+  if (containerRef.value) {
+    ro = new ResizeObserver(() => updateWidth());
+    ro.observe(containerRef.value);
+  }
+});
 
 onBeforeUnmount(() => {
   ro?.disconnect();
   ro = null;
 });
+
+provide(FLOW_WIDTH_KEY, flowWidth);
 </script>
 
 <template>
