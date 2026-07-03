@@ -6,8 +6,20 @@ use serde::{Deserialize, Serialize};
 pub struct DisplayArtifactTurnInput {
     pub sidecar_session_id: Option<String>,
     pub session_title: Option<String>,
+    pub group_name: Option<String>,
+    pub client_name: Option<ClientName>,
+    pub project_name: Option<String>,
+    pub project_path: Option<String>,
     pub turn_hint: Option<String>,
     pub artifacts: Vec<ArtifactInput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub enum ClientName {
+    Codex,
+    ZCode,
+    Cursor,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -22,7 +34,7 @@ pub struct ArtifactInput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "camelCase")]
 pub enum ArtifactInputKind {
     Image,
     Latex,

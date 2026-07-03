@@ -6,9 +6,13 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{
-    gallery::types::{ArtifactSession, ArtifactTurn},
+    app_paths::AppPaths,
+    gallery::{
+        persistence::GallerySnapshot,
+        types::{ArtifactItem, ArtifactSession, ArtifactTurn},
+        view_model::GalleryView,
+    },
     mcp::types::{DisplayArtifactTurnInput, DisplayArtifactTurnResult},
-    paths,
 };
 
 #[derive(Debug, Serialize)]
@@ -23,13 +27,37 @@ struct ResolvedSessionDebug<'a> {
 #[serde(rename_all = "camelCase")]
 struct CreatedArtifactsDebug<'a> {
     artifact_ids: &'a [String],
-    artifacts: Vec<&'a crate::gallery::types::ArtifactItem>,
+    artifacts: Vec<&'a ArtifactItem>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImageDownloadPlanDebug<'a> {
+    artifact_index: usize,
+    title: &'a str,
+    image_url: Option<&'a str>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImageDownloadResultDebug<'a> {
+    artifact_id: &'a str,
+    title: &'a str,
+    status: &'a crate::gallery::types::ArtifactStatus,
+    image_url: Option<&'a str>,
+    local_file_path: Option<&'a str>,
+    mime_type: Option<&'a str>,
+    file_extension: Option<&'a str>,
+    error_message: Option<&'a str>,
 }
 
 pub fn write_run(
+    app_paths: &AppPaths,
     input: &DisplayArtifactTurnInput,
     result: &DisplayArtifactTurnResult,
-    sessions_after: &[ArtifactSession],
+    snapshot_before: &GallerySnapshot,
+    snapshot_after: &GallerySnapshot,
+    view_after: &GalleryView,
 ) -> anyhow::Result<PathBuf> {
     let short_id = Uuid::new_v4()
         .to_string()
@@ -37,13 +65,14 @@ pub fn write_run(
         .next()
         .unwrap_or("run")
         .to_string();
-    let run_dir = paths::debug_artifacts_dir().join(format!(
+    let run_dir = app_paths.debug_artifacts_dir.join(format!(
         "run-{}-{short_id}",
         Local::now().format("%Y%m%d-%H%M%S")
     ));
     fs::create_dir_all(&run_dir).with_context(|| format!("creating {}", run_dir.display()))?;
 
-    let session = sessions_after
+    let session = snapshot_after
+        .sessions
         .iter()
         .find(|session| session.id == result.sidecar_session_id);
     let turn = session.and_then(|session| {
@@ -54,6 +83,17 @@ pub fn write_run(
     });
 
     write_json(run_dir.join("mcp-request.json"), input)?;
+    write_json(run_dir.join("image-download-plan.json"), &image_plan(input))?;
+    if let Some(turn) = turn {
+        write_json(
+            run_dir.join("image-download-result.json"),
+            &image_results(turn, result),
+        )?;
+    }
+    write_json(run_dir.join("persistence-before.json"), snapshot_before)?;
+    write_json(run_dir.join("persistence-after.json"), snapshot_after)?;
+    copy_event_log(app_paths, &run_dir)?;
+    write_json(run_dir.join("gallery-view-after.json"), view_after)?;
     if let Some(session) = session {
         write_json(
             run_dir.join("resolved-session.json"),
@@ -68,12 +108,60 @@ pub fn write_run(
         write_json(run_dir.join("created-turn.json"), turn)?;
         write_created_artifacts(&run_dir, turn, result)?;
     }
-    write_json(run_dir.join("gallery-state-after.json"), sessions_after)?;
     write_json(run_dir.join("tool-result.json"), result)?;
     write_summary(&run_dir, session, turn, result)?;
 
     tracing::info!(target: "sidecar", path = %run_dir.display(), "debug artifact run written");
     Ok(run_dir)
+}
+
+fn image_plan(input: &DisplayArtifactTurnInput) -> Vec<ImageDownloadPlanDebug<'_>> {
+    input
+        .artifacts
+        .iter()
+        .enumerate()
+        .map(|(index, artifact)| ImageDownloadPlanDebug {
+            artifact_index: index,
+            title: &artifact.title,
+            image_url: artifact.image_url.as_deref(),
+        })
+        .collect()
+}
+
+fn image_results<'a>(
+    turn: &'a ArtifactTurn,
+    result: &DisplayArtifactTurnResult,
+) -> Vec<ImageDownloadResultDebug<'a>> {
+    turn.artifacts
+        .iter()
+        .filter(|artifact| result.artifact_ids.contains(&artifact.id))
+        .map(|artifact| ImageDownloadResultDebug {
+            artifact_id: &artifact.id,
+            title: &artifact.title,
+            status: &artifact.status,
+            image_url: artifact.image_url.as_deref(),
+            local_file_path: artifact.local_file_path.as_deref(),
+            mime_type: artifact.mime_type.as_deref(),
+            file_extension: artifact.file_extension.as_deref(),
+            error_message: artifact.error_message.as_deref(),
+        })
+        .collect()
+}
+
+fn copy_event_log(app_paths: &AppPaths, run_dir: &std::path::Path) -> anyhow::Result<()> {
+    let output_path = run_dir.join("gallery-event.jsonl");
+    if app_paths.gallery_events_path.exists() {
+        fs::copy(&app_paths.gallery_events_path, &output_path).with_context(|| {
+            format!(
+                "copying {} to {}",
+                app_paths.gallery_events_path.display(),
+                output_path.display()
+            )
+        })?;
+    } else {
+        fs::write(&output_path, "")?;
+    }
+    Ok(())
 }
 
 fn write_created_artifacts(

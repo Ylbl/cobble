@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import SidebarTopActions from "./SidebarTopActions.vue";
 import SessionList from "./SessionList.vue";
-import type { Session } from "../types/gallery";
+import type { GalleryView, SidebarMode } from "../types/gallery";
 
 defineProps<{
-  sessions: Session[];
+  galleryView: GalleryView;
   selectedSessionId: string;
 }>();
 
 defineEmits<{
+  "set-sidebar-mode": [mode: SidebarMode];
   "select-session": [sessionId: string];
 }>();
 </script>
@@ -17,8 +18,9 @@ defineEmits<{
   <aside class="left-sidebar">
     <SidebarTopActions />
     <SessionList
-      :sessions="sessions"
+      :gallery-view="galleryView"
       :selected-session-id="selectedSessionId"
+      @set-sidebar-mode="$emit('set-sidebar-mode', $event)"
       @select-session="$emit('select-session', $event)"
     />
     <div class="sidebar-bottom">

@@ -8,7 +8,7 @@ use tauri::Manager;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
-use crate::{mcp::tools::SidecarMcpService, paths};
+use crate::{app_paths::AppPaths, mcp::tools::SidecarMcpService};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -82,7 +82,8 @@ pub async fn start(app: tauri::AppHandle) -> anyhow::Result<()> {
         };
     }
 
-    write_status_file(&url)?;
+    let app_paths = app.state::<AppPaths>();
+    write_status_file(&app_paths, &url)?;
     tracing::info!(target: "sidecar", url = %url, "MCP Server started");
 
     axum::serve(listener, router)
@@ -106,8 +107,8 @@ async fn bind_first_available() -> anyhow::Result<tokio::net::TcpListener> {
     anyhow::bail!("No MCP server port available in 39333..=39336")
 }
 
-fn write_status_file(url: &str) -> anyhow::Result<()> {
-    let path = paths::debug_mcp_dir();
+fn write_status_file(app_paths: &AppPaths, url: &str) -> anyhow::Result<()> {
+    let path = app_paths.data_dir.join("mcp");
     fs::create_dir_all(&path)?;
     let status = McpServerStatusFile {
         running: true,

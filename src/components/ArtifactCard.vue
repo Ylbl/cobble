@@ -42,12 +42,17 @@ function closeContextMenu() {
         <span class="preview-line"></span>
         <span class="preview-line short"></span>
         <span v-if="artifact.kind === 'svg'" class="molecule"></span>
-        <img v-if="artifact.kind === 'image' && artifact.imageUrl" :src="artifact.imageUrl" alt="" />
+        <img
+          v-if="artifact.kind === 'image' && (artifact.assetUrl || artifact.imageUrl)"
+          :src="artifact.assetUrl || artifact.imageUrl || ''"
+          alt=""
+        />
         <span v-else-if="artifact.kind === 'image'" class="image-mark"></span>
       </div>
     </div>
     <div class="artifact-body">
       <h2>{{ artifact.title }}</h2>
+      <p v-if="artifact.status === 'failed' && artifact.errorMessage">{{ artifact.errorMessage }}</p>
     </div>
     <Teleport to="body">
       <button v-if="menuOpen" class="context-backdrop" type="button" @click="closeContextMenu"></button>
@@ -193,6 +198,16 @@ h2 {
   overflow: hidden;
   color: var(--text);
   font-size: 13px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+p {
+  margin: 6px 0 0;
+  overflow: hidden;
+  color: #f87171;
+  font-size: 11px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;

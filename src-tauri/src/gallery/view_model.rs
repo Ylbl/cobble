@@ -1,15 +1,41 @@
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 
-use crate::gallery::types::{
-    ArtifactKind, ArtifactSession, ArtifactStatus, ArtifactTurn, SessionSource,
+use crate::gallery::{
+    groups::{build_group_views, build_project_views},
+    types::{
+        ArtifactKind, ArtifactSession, ArtifactStatus, ArtifactTurn, ClientName, CodexProjectGroup,
+        SessionSource, SidebarMode,
+    },
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GalleryView {
+    pub sidebar_mode: SidebarModeView,
+    pub groups: Vec<GalleryGroupView>,
+    pub projects: Vec<GalleryProjectView>,
     pub sessions: Vec<GallerySessionView>,
     pub selected_session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GalleryGroupView {
+    pub id: String,
+    pub name: String,
+    pub session_ids: Vec<String>,
+    pub session_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GalleryProjectView {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub session_ids: Vec<String>,
+    pub session_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,6 +45,7 @@ pub struct GallerySessionView {
     pub title: String,
     pub source_kind: SessionSourceView,
     pub client_name: ClientNameView,
+    pub group_name: String,
     pub project_name: String,
     pub project_path: String,
     pub created_at: String,
@@ -48,15 +75,18 @@ pub struct GalleryArtifactView {
     pub status: ArtifactStatusView,
     pub preview_type: ArtifactPreviewTypeView,
     pub image_url: Option<String>,
+    pub local_file_path: Option<String>,
+    pub asset_url: Option<String>,
     pub pdf_url: Option<String>,
     pub svg: Option<String>,
     pub latex_code: Option<String>,
     pub mime_type: Option<String>,
+    pub error_message: Option<String>,
     pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "camelCase")]
 pub enum SessionSourceView {
     Mcp,
     Manual,
@@ -72,7 +102,7 @@ pub enum ClientNameView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "camelCase")]
 pub enum ArtifactKindView {
     Image,
     Pdf,
@@ -81,7 +111,7 @@ pub enum ArtifactKindView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "camelCase")]
 pub enum ArtifactStatusView {
     Received,
     Rendering,
@@ -90,19 +120,40 @@ pub enum ArtifactStatusView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "camelCase")]
 pub enum ArtifactPreviewTypeView {
     Large,
     Small,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SidebarModeView {
+    Groups,
+    Projects,
+}
+
 pub fn to_gallery_view(
     sessions: Vec<ArtifactSession>,
     selected_session_id: Option<String>,
+    sidebar_mode: SidebarMode,
+    codex_project_groups: Vec<CodexProjectGroup>,
 ) -> GalleryView {
     let selected_session_id =
         selected_session_id.or_else(|| sessions.first().map(|s| s.id.clone()));
+    let groups = build_group_views(&sessions);
+    let projects = build_project_views(&sessions, &codex_project_groups);
+    tracing::debug!(
+        target: "sidecar",
+        session_count = sessions.len(),
+        group_count = groups.len(),
+        project_count = projects.len(),
+        "GalleryView generated"
+    );
     GalleryView {
+        sidebar_mode: sidebar_mode_to_view(sidebar_mode),
+        groups,
+        projects,
         sessions: sessions.into_iter().map(to_session_view).collect(),
         selected_session_id,
     }
@@ -115,7 +166,8 @@ fn to_session_view(session: ArtifactSession) -> GallerySessionView {
         id: session.id,
         title: session.title,
         source_kind: source_to_view(session.source_kind),
-        client_name: client_to_view(&session.client_name),
+        client_name: client_to_view(session.client_name),
+        group_name: session.group_name,
         project_name: session.project_name,
         project_path: session.project_path,
         created_at: session.created_at,
@@ -154,10 +206,13 @@ fn to_turn_view(turn: ArtifactTurn) -> GalleryTurnView {
                     ArtifactPreviewTypeView::Small
                 },
                 image_url: artifact.image_url,
+                local_file_path: artifact.local_file_path,
+                asset_url: artifact.asset_url,
                 pdf_url: artifact.pdf_url,
                 svg: artifact.svg,
                 latex_code: artifact.latex_code,
                 mime_type: artifact.mime_type,
+                error_message: artifact.error_message,
                 created_at: artifact.created_at,
             })
             .collect(),
@@ -172,12 +227,12 @@ fn source_to_view(source: SessionSource) -> SessionSourceView {
     }
 }
 
-fn client_to_view(client_name: &str) -> ClientNameView {
+fn client_to_view(client_name: ClientName) -> ClientNameView {
     match client_name {
-        "ZCode" => ClientNameView::ZCode,
-        "Codex" => ClientNameView::Codex,
-        "Cursor" => ClientNameView::Cursor,
-        _ => ClientNameView::Unknown,
+        ClientName::ZCode => ClientNameView::ZCode,
+        ClientName::Codex => ClientNameView::Codex,
+        ClientName::Cursor => ClientNameView::Cursor,
+        ClientName::Unknown => ClientNameView::Unknown,
     }
 }
 
@@ -196,5 +251,12 @@ fn status_to_view(status: ArtifactStatus) -> ArtifactStatusView {
         ArtifactStatus::Rendering => ArtifactStatusView::Rendering,
         ArtifactStatus::Finished => ArtifactStatusView::Finished,
         ArtifactStatus::Failed => ArtifactStatusView::Failed,
+    }
+}
+
+fn sidebar_mode_to_view(mode: SidebarMode) -> SidebarModeView {
+    match mode {
+        SidebarMode::Groups => SidebarModeView::Groups,
+        SidebarMode::Projects => SidebarModeView::Projects,
     }
 }

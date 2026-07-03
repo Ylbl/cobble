@@ -3,10 +3,19 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import LeftSidebar from "../components/LeftSidebar.vue";
 import MainArea from "../components/MainArea.vue";
 import { getMcpServerStatus } from "../services/mcpStatusService";
-import { listGalleryView, listenGalleryUpdates } from "../services/galleryService";
+import {
+  listGalleryView,
+  listenGalleryUpdates,
+  selectSession as selectSessionCommand,
+  setSidebarMode,
+  toggleTurnCollapsed,
+} from "../services/galleryService";
 import type { GalleryView, McpServerStatus } from "../types/gallery";
 
 const galleryView = ref<GalleryView>({
+  sidebarMode: "groups",
+  groups: [],
+  projects: [],
   sessions: [],
   selectedSessionId: null,
 });
@@ -33,15 +42,19 @@ function replaceGalleryView(nextView: GalleryView) {
   }
 }
 
-function selectSession(sessionId: string) {
+async function selectSession(sessionId: string) {
   selectedSessionId.value = sessionId;
   selectedArtifactId.value = "";
+  replaceGalleryView(await selectSessionCommand(sessionId));
 }
 
-function toggleTurn(turnId: string) {
-  const turn = selectedSession.value?.turns.find((item) => item.id === turnId);
-  if (turn) {
-    turn.collapsed = !turn.collapsed;
+async function changeSidebarMode(mode: "groups" | "projects") {
+  replaceGalleryView(await setSidebarMode(mode));
+}
+
+async function toggleTurn(turnId: string) {
+  if (selectedSession.value) {
+    replaceGalleryView(await toggleTurnCollapsed(selectedSession.value.id, turnId));
   }
 }
 
@@ -59,8 +72,9 @@ onUnmounted(() => {
 <template>
   <div class="gallery-shell">
     <LeftSidebar
-      :sessions="sessions"
+      :gallery-view="galleryView"
       :selected-session-id="selectedSessionId"
+      @set-sidebar-mode="changeSidebarMode"
       @select-session="selectSession"
     />
     <MainArea

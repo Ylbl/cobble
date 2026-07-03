@@ -8,6 +8,7 @@ export const mockSessions: Session[] = [
     title: "阿司匹林化学结构讨论",
     sourceKind: "mock",
     clientName: "ZCode",
+    groupName: "默认分组",
     projectName: "ZCodeProject",
     projectPath: "C:\\Users\\o\\Desktop\\ZCodeProject",
     createdAt: mockNow,
@@ -82,6 +83,7 @@ export const mockSessions: Session[] = [
     title: "RLC 实验报告图像整理",
     sourceKind: "mock",
     clientName: "Codex",
+    groupName: "默认分组",
     projectName: "PhysicsLab",
     projectPath: "C:\\Users\\o\\Documents\\PhysicsLab",
     createdAt: mockNow,
@@ -139,6 +141,7 @@ export const mockSessions: Session[] = [
     title: "简历附件 PDF 版本管理",
     sourceKind: "mock",
     clientName: "Cursor",
+    groupName: "默认分组",
     projectName: "CareerDocs",
     projectPath: "C:\\Users\\o\\Desktop\\CareerDocs",
     createdAt: mockNow,
@@ -178,6 +181,7 @@ export const mockSessions: Session[] = [
     title: "LaTeX 论文图表预览",
     sourceKind: "mock",
     clientName: "ZCode",
+    groupName: "默认分组",
     projectName: "PaperDraft",
     projectPath: "C:\\Users\\o\\Research\\PaperDraft",
     createdAt: mockNow,
@@ -209,6 +213,7 @@ export const mockSessions: Session[] = [
     title: "AI Sidecar UI 参考板",
     sourceKind: "mock",
     clientName: "Codex",
+    groupName: "默认分组",
     projectName: "Cobble",
     projectPath: "C:\\Users\\o\\RustroverProjects\\cobble",
     createdAt: mockNow,
@@ -239,6 +244,24 @@ export const mockSessions: Session[] = [
 ];
 
 export const mockGalleryView: GalleryView = {
+  sidebarMode: "groups",
+  groups: [
+    {
+      id: "group:默认分组",
+      name: "默认分组",
+      sessionIds: mockSessions.map((session) => session.id),
+      sessionCount: mockSessions.length,
+    },
+  ],
+  projects: [
+    {
+      id: "project:C:\\Users\\o\\RustroverProjects\\cobble",
+      name: "Cobble",
+      path: "C:\\Users\\o\\RustroverProjects\\cobble",
+      sessionIds: ["ui-board"],
+      sessionCount: 1,
+    },
+  ],
   sessions: mockSessions,
   selectedSessionId: mockSessions[0]?.id ?? null,
 };

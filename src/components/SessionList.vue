@@ -1,35 +1,65 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import SessionItem from "./SessionItem.vue";
-import type { Session } from "../types/gallery";
+import type { GalleryView, SidebarMode, Session } from "../types/gallery";
 
-defineProps<{
-  sessions: Session[];
+const props = defineProps<{
+  galleryView: GalleryView;
   selectedSessionId: string;
 }>();
 
 defineEmits<{
+  "set-sidebar-mode": [mode: SidebarMode];
   "select-session": [sessionId: string];
 }>();
+
+const sessionById = computed(() => new Map(props.galleryView.sessions.map((session) => [session.id, session])));
+
+const sections = computed(() => {
+  const source =
+    props.galleryView.sidebarMode === "projects" ? props.galleryView.projects : props.galleryView.groups;
+  return source.map((section) => ({
+    id: section.id,
+    name: section.name,
+    sessions: section.sessionIds
+      .map((sessionId) => sessionById.value.get(sessionId))
+      .filter((session): session is Session => Boolean(session)),
+  }));
+});
 </script>
 
 <template>
   <div class="session-list-wrap">
     <div class="segmented">
-      <button class="muted" type="button">分组</button>
-      <button class="active" type="button">项目</button>
+      <button
+        :class="{ active: galleryView.sidebarMode === 'groups', muted: galleryView.sidebarMode !== 'groups' }"
+        type="button"
+        @click="$emit('set-sidebar-mode', 'groups')"
+      >
+        分组
+      </button>
+      <button
+        :class="{ active: galleryView.sidebarMode === 'projects', muted: galleryView.sidebarMode !== 'projects' }"
+        type="button"
+        @click="$emit('set-sidebar-mode', 'projects')"
+      >
+        项目
+      </button>
       <button class="muted icon" type="button" title="过滤">≡</button>
     </div>
-    <div class="group-title">
-      <span>▿ Desktop</span>
-    </div>
     <nav class="session-list" aria-label="Sessions">
-      <SessionItem
-        v-for="session in sessions"
-        :key="session.id"
-        :session="session"
-        :active="session.id === selectedSessionId"
-        @click="$emit('select-session', session.id)"
-      />
+      <template v-for="section in sections" :key="section.id">
+        <div class="group-title">
+          <span>▿ {{ section.name }}</span>
+        </div>
+        <SessionItem
+          v-for="session in section.sessions"
+          :key="session.id"
+          :session="session"
+          :active="session.id === selectedSessionId"
+          @click="$emit('select-session', session.id)"
+        />
+      </template>
       <button class="show-more" type="button">显示更多</button>
     </nav>
   </div>

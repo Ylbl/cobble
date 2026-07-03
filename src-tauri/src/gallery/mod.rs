@@ -1,5 +1,10 @@
+pub mod codex_groups;
 pub mod debug_artifacts;
+pub mod event_log;
 pub mod events;
+pub mod groups;
+pub mod image_cache;
+pub mod persistence;
 pub mod state;
 pub mod types;
 pub mod view_model;

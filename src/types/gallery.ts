@@ -8,9 +8,29 @@ export type ArtifactStatus = "received" | "rendering" | "finished" | "failed";
 
 export type ArtifactPreviewType = "large" | "small";
 
+export type SidebarMode = "groups" | "projects";
+
 export type GalleryView = {
+  sidebarMode: SidebarMode;
+  groups: GalleryGroupView[];
+  projects: GalleryProjectView[];
   sessions: GallerySessionView[];
   selectedSessionId?: string | null;
+};
+
+export type GalleryGroupView = {
+  id: string;
+  name: string;
+  sessionIds: string[];
+  sessionCount: number;
+};
+
+export type GalleryProjectView = {
+  id: string;
+  name: string;
+  path: string;
+  sessionIds: string[];
+  sessionCount: number;
 };
 
 export type GallerySessionView = {
@@ -18,6 +38,7 @@ export type GallerySessionView = {
   title: string;
   sourceKind: SessionSourceKind;
   clientName: SessionClientName;
+  groupName: string;
   projectName: string;
   projectPath: string;
   createdAt: string;
@@ -43,10 +64,13 @@ export type GalleryArtifactView = {
   status: ArtifactStatus;
   previewType: ArtifactPreviewType;
   imageUrl?: string | null;
+  localFilePath?: string | null;
+  assetUrl?: string | null;
   pdfUrl?: string | null;
   svg?: string | null;
   latexCode?: string | null;
   mimeType?: string | null;
+  errorMessage?: string | null;
   createdAt: string;
 };
 

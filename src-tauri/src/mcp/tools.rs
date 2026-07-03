@@ -62,12 +62,20 @@ impl SidecarMcpService {
         );
 
         let state = self.app.state::<GalleryState>();
+        let snapshot_before = state.snapshot().await;
         let result = state.display_artifact_turn(input.clone()).await;
-        let sessions_after = state.list_sessions().await;
-        if let Err(error) = debug_artifacts::write_run(&input, &result, &sessions_after) {
+        let snapshot_after = state.snapshot().await;
+        let view = state.list_view().await;
+        if let Err(error) = debug_artifacts::write_run(
+            state.app_paths(),
+            &input,
+            &result,
+            &snapshot_before,
+            &snapshot_after,
+            &view,
+        ) {
             tracing::error!(target: "sidecar", ?error, "failed to write debug artifacts");
         }
-        let view = state.list_view().await;
         events::emit_artifact_created(&self.app, &result);
         events::emit_gallery_updated(&self.app, view);
 

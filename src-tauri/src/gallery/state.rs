@@ -1,32 +1,121 @@
+use anyhow::Result;
 use chrono::Utc;
+use serde_json::json;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::{
-    gallery::types::{
-        ArtifactItem, ArtifactKind, ArtifactSession, ArtifactStatus, ArtifactTurn, SessionSource,
+    app_paths::AppPaths,
+    gallery::{
+        codex_groups,
+        event_log::{self, append_error},
+        groups::normalize_group_name,
+        image_cache,
+        persistence::{self, GallerySnapshot},
+        types::{
+            ArtifactItem, ArtifactKind, ArtifactSession, ArtifactStatus, ArtifactTurn, ClientName,
+            CodexProjectGroup, SessionSource, SidebarMode,
+        },
+        view_model::{to_gallery_view, GalleryView},
     },
-    gallery::view_model::{to_gallery_view, GalleryView},
     mcp::types::{
-        ArtifactInputKind, DisplayArtifactTurnInput, DisplayArtifactTurnResult, REUSE_INSTRUCTION,
+        ArtifactInput, ArtifactInputKind, ClientName as InputClientName, DisplayArtifactTurnInput,
+        DisplayArtifactTurnResult, REUSE_INSTRUCTION,
     },
 };
 
 pub struct GalleryState {
+    app_paths: AppPaths,
     pub sessions: RwLock<Vec<ArtifactSession>>,
     pub selected_session_id: RwLock<Option<String>>,
-}
-
-impl Default for GalleryState {
-    fn default() -> Self {
-        Self {
-            sessions: RwLock::new(Vec::new()),
-            selected_session_id: RwLock::new(None),
-        }
-    }
+    pub sidebar_mode: RwLock<SidebarMode>,
+    pub codex_project_groups: RwLock<Vec<CodexProjectGroup>>,
 }
 
 impl GalleryState {
+    pub async fn load(app_paths: AppPaths) -> Result<Self> {
+        event_log::append_simple(&app_paths, "app_started", json!({})).await?;
+
+        let loaded = match persistence::load(&app_paths).await {
+            Ok(loaded) => loaded,
+            Err(error) => {
+                tracing::error!(target: "sidecar", ?error, "gallery-state.json load failed; using empty state");
+                append_error(&app_paths, "gallery_load_failed", &error).await;
+                persistence::LoadedGallerySnapshot {
+                    snapshot: GallerySnapshot::default(),
+                    existed: false,
+                }
+            }
+        };
+
+        event_log::append_simple(
+            &app_paths,
+            "gallery_loaded",
+            json!({
+                "existed": loaded.existed,
+                "sessionCount": loaded.snapshot.sessions.len(),
+            }),
+        )
+        .await?;
+
+        let codex_project_groups = match codex_groups::load_project_groups(&app_paths).await {
+            Ok(groups) => groups,
+            Err(error) => {
+                tracing::warn!(target: "sidecar", ?error, "Codex project groups unavailable");
+                Vec::new()
+            }
+        };
+
+        event_log::append_simple(
+            &app_paths,
+            "codex_project_groups_loaded",
+            json!({ "count": codex_project_groups.len() }),
+        )
+        .await?;
+
+        let sidebar_mode = if codex_project_groups.is_empty() {
+            tracing::info!(
+                target: "sidecar",
+                "Codex project groups empty; falling back to sidebarMode=groups"
+            );
+            event_log::append_simple(
+                &app_paths,
+                "codex_project_groups_empty_fallback_to_groups",
+                json!({ "reason": "codex project groups empty" }),
+            )
+            .await?;
+            SidebarMode::Groups
+        } else {
+            loaded.snapshot.sidebar_mode
+        };
+
+        let state = Self {
+            app_paths: app_paths.clone(),
+            sessions: RwLock::new(loaded.snapshot.sessions),
+            selected_session_id: RwLock::new(loaded.snapshot.selected_session_id),
+            sidebar_mode: RwLock::new(sidebar_mode),
+            codex_project_groups: RwLock::new(codex_project_groups),
+        };
+
+        if !loaded.existed {
+            state.persist_current("gallery_state_saved").await?;
+        }
+
+        Ok(state)
+    }
+
+    pub fn app_paths(&self) -> &AppPaths {
+        &self.app_paths
+    }
+
+    pub async fn snapshot(&self) -> GallerySnapshot {
+        GallerySnapshot {
+            sessions: self.sessions.read().await.clone(),
+            selected_session_id: self.selected_session_id.read().await.clone(),
+            sidebar_mode: self.sidebar_mode.read().await.clone(),
+        }
+    }
+
     pub async fn list_sessions(&self) -> Vec<ArtifactSession> {
         tracing::debug!(target: "sidecar", "front end requested gallery state");
         self.sessions.read().await.clone()
@@ -36,7 +125,51 @@ impl GalleryState {
         tracing::debug!(target: "sidecar", "front end requested gallery view");
         let sessions = self.sessions.read().await.clone();
         let selected_session_id = self.selected_session_id.read().await.clone();
-        to_gallery_view(sessions, selected_session_id)
+        let sidebar_mode = self.sidebar_mode.read().await.clone();
+        let codex_project_groups = self.codex_project_groups.read().await.clone();
+        to_gallery_view(
+            sessions,
+            selected_session_id,
+            sidebar_mode,
+            codex_project_groups,
+        )
+    }
+
+    pub async fn set_sidebar_mode(&self, mode: SidebarMode) -> Result<GalleryView> {
+        *self.sidebar_mode.write().await = mode;
+        self.persist_current("gallery_state_saved").await?;
+        Ok(self.list_view().await)
+    }
+
+    pub async fn select_session(&self, session_id: String) -> Result<GalleryView> {
+        let exists = self
+            .sessions
+            .read()
+            .await
+            .iter()
+            .any(|session| session.id == session_id);
+        if exists {
+            *self.selected_session_id.write().await = Some(session_id);
+            self.persist_current("gallery_state_saved").await?;
+        }
+        Ok(self.list_view().await)
+    }
+
+    pub async fn toggle_turn_collapsed(
+        &self,
+        session_id: String,
+        turn_id: String,
+    ) -> Result<GalleryView> {
+        {
+            let mut sessions = self.sessions.write().await;
+            if let Some(session) = sessions.iter_mut().find(|item| item.id == session_id) {
+                if let Some(turn) = session.turns.iter_mut().find(|item| item.id == turn_id) {
+                    turn.collapsed = !turn.collapsed;
+                }
+            }
+        }
+        self.persist_current("gallery_state_saved").await?;
+        Ok(self.list_view().await)
     }
 
     pub async fn display_artifact_turn(
@@ -45,131 +178,119 @@ impl GalleryState {
     ) -> DisplayArtifactTurnResult {
         tracing::info!(target: "sidecar", artifact_count = input.artifacts.len(), "display_artifact_turn received");
 
-        let mut sessions = self.sessions.write().await;
+        let prepared_artifacts = self.prepare_artifacts(&input.artifacts).await;
+
         let mut created_new_session = false;
-        let session_index = input
-            .sidecar_session_id
-            .as_ref()
-            .and_then(|id| sessions.iter().position(|session| &session.id == id));
-
-        let session_index = match session_index {
-            Some(index) => {
-                tracing::debug!(target: "sidecar", sidecar_session_id = %sessions[index].id, "reusing session");
-                index
-            }
-            None => {
-                created_new_session = true;
-                let now = now_string();
-                let id = Uuid::new_v4().to_string();
-                tracing::info!(target: "sidecar", sidecar_session_id = %id, "creating session");
-                sessions.push(ArtifactSession {
-                    id,
-                    title: input
-                        .session_title
-                        .clone()
-                        .unwrap_or_else(|| "未命名会话".to_string()),
-                    source_kind: SessionSource::Mcp,
-                    client_name: "Unknown".to_string(),
-                    project_name: String::new(),
-                    project_path: String::new(),
-                    created_at: now.clone(),
-                    updated_at: now,
-                    turns: Vec::new(),
-                });
-                sessions.len() - 1
-            }
-        };
-
-        let session = &mut sessions[session_index];
-        if let Some(session_title) = input
-            .session_title
-            .as_ref()
-            .map(|title| title.trim())
-            .filter(|title| !title.is_empty())
-        {
-            if session.title != session_title {
-                tracing::info!(
-                    target: "sidecar",
-                    sidecar_session_id = %session.id,
-                    old_title = %session.title,
-                    new_title = %session_title,
-                    "updating session title"
-                );
-                session.title = session_title.to_string();
-            }
-        }
-
-        for turn in &mut session.turns {
-            turn.collapsed = true;
-        }
-
+        let mut session_created_event = None;
         let now = now_string();
         let turn_id = Uuid::new_v4().to_string();
-        let turn_index = session.turns.len() as u32 + 1;
         let mut artifact_ids = Vec::new();
-        let mut artifacts = Vec::new();
+        let sidecar_session_id;
+        {
+            let mut sessions = self.sessions.write().await;
+            let session_index = input
+                .sidecar_session_id
+                .as_ref()
+                .and_then(|id| sessions.iter().position(|session| &session.id == id));
 
-        tracing::info!(
-            target: "sidecar",
-            sidecar_session_id = %session.id,
-            sidecar_turn_id = %turn_id,
-            turn_index,
-            "creating turn"
-        );
-
-        for artifact in input.artifacts {
-            match artifact.kind {
-                ArtifactInputKind::Image => {
-                    let artifact_id = Uuid::new_v4().to_string();
-                    let status = if artifact.image_url.is_some() {
-                        ArtifactStatus::Finished
-                    } else {
-                        ArtifactStatus::Failed
-                    };
-                    tracing::debug!(
-                        target: "sidecar",
-                        artifact_id = %artifact_id,
-                        title = %artifact.title,
-                        "creating image artifact"
-                    );
-                    artifact_ids.push(artifact_id.clone());
-                    artifacts.push(ArtifactItem {
-                        id: artifact_id,
-                        title: artifact.title,
-                        kind: ArtifactKind::Image,
-                        status,
-                        image_url: artifact.image_url,
-                        pdf_url: None,
-                        svg: None,
-                        latex_code: None,
-                        source_text: None,
-                        mime_type: Some("image/png".to_string()),
-                        file_extension: Some("png".to_string()),
+            let session_index = match session_index {
+                Some(index) => {
+                    tracing::debug!(target: "sidecar", sidecar_session_id = %sessions[index].id, "reusing session");
+                    index
+                }
+                None => {
+                    created_new_session = true;
+                    let id = Uuid::new_v4().to_string();
+                    let title = normalize_text(input.session_title.as_deref(), "未命名会话");
+                    tracing::info!(target: "sidecar", sidecar_session_id = %id, "creating session");
+                    sessions.push(ArtifactSession {
+                        id: id.clone(),
+                        title,
+                        source_kind: SessionSource::Mcp,
+                        client_name: input_client_to_domain(input.client_name.clone()),
+                        group_name: normalize_group_name(input.group_name.as_deref().unwrap_or("")),
+                        project_name: normalize_optional(input.project_name.as_deref()),
+                        project_path: normalize_optional(input.project_path.as_deref()),
                         created_at: now.clone(),
+                        updated_at: now.clone(),
+                        turns: Vec::new(),
                     });
+                    session_created_event = Some(id);
+                    sessions.len() - 1
                 }
-                unsupported => {
-                    tracing::warn!(target: "sidecar", ?unsupported, "unsupported artifact kind ignored");
-                }
+            };
+
+            let session = &mut sessions[session_index];
+            update_session_from_input(session, &input);
+
+            for turn in &mut session.turns {
+                turn.collapsed = true;
             }
+
+            let turn_index = session.turns.len() as u32 + 1;
+            for artifact in &prepared_artifacts {
+                artifact_ids.push(artifact.id.clone());
+            }
+
+            tracing::info!(
+                target: "sidecar",
+                sidecar_session_id = %session.id,
+                sidecar_turn_id = %turn_id,
+                turn_index,
+                artifact_count = prepared_artifacts.len(),
+                "creating turn"
+            );
+
+            session.updated_at = now.clone();
+            session.turns.push(ArtifactTurn {
+                id: turn_id.clone(),
+                index: turn_index,
+                hint: input.turn_hint.clone(),
+                created_at: now.clone(),
+                artifacts: prepared_artifacts,
+                collapsed: false,
+            });
+            sidecar_session_id = session.id.clone();
         }
 
-        session.updated_at = now.clone();
-        session.turns.push(ArtifactTurn {
-            id: turn_id.clone(),
-            index: turn_index,
-            hint: input.turn_hint,
-            created_at: now,
-            artifacts,
-            collapsed: false,
-        });
-        let sidecar_session_id = session.id.clone();
         *self.selected_session_id.write().await = Some(sidecar_session_id.clone());
+
+        if let Some(created_session_id) = session_created_event {
+            self.append_event(
+                "session_created",
+                json!({ "sidecarSessionId": created_session_id }),
+            )
+            .await;
+        }
+        self.append_event(
+            "turn_created",
+            json!({
+                "sidecarSessionId": sidecar_session_id,
+                "sidecarTurnId": turn_id,
+                "artifactCount": artifact_ids.len(),
+            }),
+        )
+        .await;
+        for artifact_id in &artifact_ids {
+            self.append_event(
+                "artifact_created",
+                json!({
+                    "sidecarSessionId": sidecar_session_id,
+                    "sidecarTurnId": turn_id,
+                    "artifactId": artifact_id,
+                }),
+            )
+            .await;
+        }
+
+        if let Err(error) = self.persist_current("gallery_state_saved").await {
+            tracing::error!(target: "sidecar", ?error, "failed to persist gallery state");
+        }
 
         let displayed = !artifact_ids.is_empty();
         tracing::info!(
             target: "sidecar",
-            sidecar_session_id = %session.id,
+            sidecar_session_id = %sidecar_session_id,
             sidecar_turn_id = %turn_id,
             artifact_count = artifact_ids.len(),
             "display_artifact_turn completed"
@@ -190,6 +311,196 @@ impl GalleryState {
             reuse_instruction: REUSE_INSTRUCTION.to_string(),
         }
     }
+
+    async fn prepare_artifacts(&self, artifacts: &[ArtifactInput]) -> Vec<ArtifactItem> {
+        let mut prepared = Vec::new();
+        let now = now_string();
+
+        for artifact in artifacts {
+            match artifact.kind {
+                ArtifactInputKind::Image => {
+                    let artifact_id = Uuid::new_v4().to_string();
+                    let item = self
+                        .prepare_image_artifact(artifact, artifact_id, &now)
+                        .await;
+                    if let Err(error) =
+                        image_cache::write_artifact_manifest(&self.app_paths, &item.id, &item).await
+                    {
+                        tracing::error!(target: "sidecar", ?error, artifact_id = %item.id, "failed to write artifact manifest");
+                    }
+                    prepared.push(item);
+                }
+                _ => {
+                    tracing::warn!(target: "sidecar", kind = ?artifact.kind, "unsupported artifact kind ignored");
+                }
+            }
+        }
+
+        prepared
+    }
+
+    async fn prepare_image_artifact(
+        &self,
+        artifact: &ArtifactInput,
+        artifact_id: String,
+        now: &str,
+    ) -> ArtifactItem {
+        let Some(image_url) = artifact.image_url.clone() else {
+            let error_message = "image artifact requires imageUrl".to_string();
+            tracing::warn!(target: "sidecar", artifact_id = %artifact_id, "image artifact missing imageUrl");
+            return ArtifactItem {
+                id: artifact_id,
+                title: artifact.title.clone(),
+                kind: ArtifactKind::Image,
+                status: ArtifactStatus::Failed,
+                image_url: None,
+                local_file_path: None,
+                asset_url: None,
+                pdf_url: None,
+                svg: None,
+                latex_code: None,
+                source_text: None,
+                mime_type: None,
+                file_extension: None,
+                error_message: Some(error_message),
+                created_at: now.to_string(),
+            };
+        };
+
+        self.append_event(
+            "image_download_started",
+            json!({ "artifactId": artifact_id, "imageUrl": image_url }),
+        )
+        .await;
+        let download =
+            image_cache::cache_remote_image(&self.app_paths, &artifact_id, &image_url).await;
+        if download.ok {
+            self.append_event(
+                "image_download_finished",
+                json!({
+                    "artifactId": artifact_id,
+                    "statusCode": download.status_code,
+                    "contentType": download.content_type,
+                    "localFilePath": download.local_file_path,
+                }),
+            )
+            .await;
+        } else {
+            self.append_event(
+                "image_download_failed",
+                json!({
+                    "artifactId": artifact_id,
+                    "errorMessage": download.error_message,
+                }),
+            )
+            .await;
+        }
+
+        tracing::info!(
+            target: "sidecar",
+            artifact_id = %artifact_id,
+            status = if download.ok { "finished" } else { "failed" },
+            "artifact status changed"
+        );
+
+        ArtifactItem {
+            id: artifact_id,
+            title: artifact.title.clone(),
+            kind: ArtifactKind::Image,
+            status: if download.ok {
+                ArtifactStatus::Finished
+            } else {
+                ArtifactStatus::Failed
+            },
+            image_url: Some(image_url),
+            local_file_path: download.local_file_path.clone(),
+            asset_url: None,
+            pdf_url: None,
+            svg: None,
+            latex_code: None,
+            source_text: None,
+            mime_type: download.content_type.clone(),
+            file_extension: download.file_extension.clone(),
+            error_message: download.error_message.clone(),
+            created_at: now.to_string(),
+        }
+    }
+
+    async fn persist_current(&self, event_type: &str) -> Result<()> {
+        let snapshot = self.snapshot().await;
+        persistence::save(&self.app_paths, &snapshot).await?;
+        self.append_event(
+            event_type,
+            json!({
+                "sessionCount": snapshot.sessions.len(),
+            }),
+        )
+        .await;
+        Ok(())
+    }
+
+    async fn append_event(&self, event_type: &str, payload: serde_json::Value) {
+        if let Err(error) = event_log::append_simple(&self.app_paths, event_type, payload).await {
+            tracing::error!(target: "sidecar", ?error, event_type, "failed to append gallery event");
+        }
+    }
+}
+
+fn update_session_from_input(session: &mut ArtifactSession, input: &DisplayArtifactTurnInput) {
+    if let Some(session_title) = input
+        .session_title
+        .as_ref()
+        .map(|title| title.trim())
+        .filter(|title| !title.is_empty())
+    {
+        if session.title != session_title {
+            tracing::info!(
+                target: "sidecar",
+                sidecar_session_id = %session.id,
+                old_title = %session.title,
+                new_title = %session_title,
+                "updating session title"
+            );
+            session.title = session_title.to_string();
+        }
+    }
+    if let Some(group_name) = input.group_name.as_deref() {
+        session.group_name = normalize_group_name(group_name);
+    }
+    if let Some(client_name) = input.client_name.clone() {
+        session.client_name = input_client_to_domain(Some(client_name));
+    }
+    if let Some(project_name) = input.project_name.as_deref() {
+        session.project_name = normalize_optional(Some(project_name));
+    }
+    if let Some(project_path) = input.project_path.as_deref() {
+        session.project_path = normalize_optional(Some(project_path));
+    }
+}
+
+fn input_client_to_domain(client_name: Option<InputClientName>) -> ClientName {
+    match client_name.unwrap_or(InputClientName::Unknown) {
+        InputClientName::Codex => ClientName::Codex,
+        InputClientName::ZCode => ClientName::ZCode,
+        InputClientName::Cursor => ClientName::Cursor,
+        InputClientName::Unknown => ClientName::Unknown,
+    }
+}
+
+fn normalize_text(value: Option<&str>, fallback: &str) -> String {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+fn normalize_optional(value: Option<&str>) -> String {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("")
+        .to_string()
 }
 
 fn now_string() -> String {
