@@ -11,6 +11,7 @@ defineProps<{
 defineEmits<{
   "set-sidebar-mode": [mode: SidebarMode];
   "select-session": [sessionId: string];
+  "open-settings": [];
 }>();
 </script>
 
@@ -28,7 +29,7 @@ defineEmits<{
         <span class="avatar">O</span>
         <span class="user-name">ocmvnmqz</span>
       </div>
-      <button class="icon-button" type="button" title="设置">⚙</button>
+      <button class="icon-button" type="button" title="设置" @click="$emit('open-settings')">⚙</button>
     </div>
   </aside>
 </template>

@@ -2,7 +2,8 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import LeftSidebar from "../components/LeftSidebar.vue";
 import MainArea from "../components/MainArea.vue";
-import { getMcpServerStatus } from "../services/mcpStatusService";
+import SettingsPage from "./SettingsPage.vue";
+import { getMcpServerStatus, listenMcpStatusUpdates } from "../services/mcpStatusService";
 import {
   listGalleryView,
   listenGalleryUpdates,
@@ -21,12 +22,14 @@ const galleryView = ref<GalleryView>({
 });
 const selectedSessionId = ref("");
 const selectedArtifactId = ref("");
+const settingsOpen = ref(false);
 const mcpStatus = ref<McpServerStatus>({
   running: false,
   url: null,
   port: null,
 });
 let unlistenGallery: (() => void) | undefined;
+let unlistenMcpStatus: (() => void) | undefined;
 
 const sessions = computed(() => galleryView.value.sessions);
 
@@ -62,10 +65,14 @@ onMounted(async () => {
   replaceGalleryView(await listGalleryView());
   mcpStatus.value = await getMcpServerStatus();
   unlistenGallery = await listenGalleryUpdates(replaceGalleryView);
+  unlistenMcpStatus = await listenMcpStatusUpdates((status) => {
+    mcpStatus.value = status;
+  });
 });
 
 onUnmounted(() => {
   unlistenGallery?.();
+  unlistenMcpStatus?.();
 });
 </script>
 
@@ -76,6 +83,7 @@ onUnmounted(() => {
       :selected-session-id="selectedSessionId"
       @set-sidebar-mode="changeSidebarMode"
       @select-session="selectSession"
+      @open-settings="settingsOpen = true"
     />
     <MainArea
       v-if="selectedSession"
@@ -88,6 +96,13 @@ onUnmounted(() => {
     <main v-else class="empty-main">
       <div class="empty-state">暂无 artifact session</div>
     </main>
+    <SettingsPage
+      v-if="settingsOpen"
+      :mcp-status="mcpStatus"
+      @close="settingsOpen = false"
+      @mcp-status="mcpStatus = $event"
+      @gallery-view="replaceGalleryView"
+    />
   </div>
 </template>
 

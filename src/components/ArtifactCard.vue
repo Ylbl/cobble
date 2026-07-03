@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { reactive, ref } from "vue";
+import { openPath } from "../services/settingsService";
 import type { Artifact } from "../types/gallery";
 
-defineProps<{
+const props = defineProps<{
   artifact: Artifact;
   selected: boolean;
 }>();
@@ -23,6 +24,13 @@ function openContextMenu(event: MouseEvent) {
 
 function closeContextMenu() {
   menuOpen.value = false;
+}
+
+async function openArtifactPath(path?: string | null) {
+  if (path) {
+    await openPath(path);
+  }
+  closeContextMenu();
 }
 </script>
 
@@ -52,6 +60,8 @@ function closeContextMenu() {
     </div>
     <div class="artifact-body">
       <h2>{{ artifact.title }}</h2>
+      <p v-if="artifact.pdfLocalFilePath">PDF 已生成：{{ artifact.pdfLocalFilePath }}</p>
+      <p v-if="artifact.logFilePath">日志：{{ artifact.logFilePath }}</p>
       <p v-if="artifact.status === 'failed' && artifact.errorMessage">{{ artifact.errorMessage }}</p>
     </div>
     <Teleport to="body">
@@ -67,10 +77,12 @@ function closeContextMenu() {
           <span>{{ artifact.kind.toUpperCase() }}</span>
           <span :class="['menu-status', artifact.status]">{{ artifact.status }}</span>
         </div>
-        <button type="button" role="menuitem" @click="closeContextMenu">打开</button>
+        <button type="button" role="menuitem" @click="openArtifactPath(props.artifact.pdfLocalFilePath || props.artifact.localFilePath)">
+          打开
+        </button>
         <button type="button" role="menuitem" @click="closeContextMenu">复制路径</button>
         <button type="button" role="menuitem" @click="closeContextMenu">查看源码</button>
-        <button type="button" role="menuitem" @click="closeContextMenu">查看日志</button>
+        <button type="button" role="menuitem" @click="openArtifactPath(props.artifact.logFilePath || props.artifact.stderrPath)">查看日志</button>
       </div>
     </Teleport>
   </article>

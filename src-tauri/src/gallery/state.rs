@@ -18,6 +18,7 @@ use crate::{
         },
         view_model::{to_gallery_view, GalleryView},
     },
+    latex::types::LatexCompileResult,
     mcp::types::{
         ArtifactInput, ArtifactInputKind, ClientName as InputClientName, DisplayArtifactTurnInput,
         DisplayArtifactTurnResult, REUSE_INSTRUCTION,
@@ -168,6 +169,90 @@ impl GalleryState {
                 }
             }
         }
+        self.persist_current("gallery_state_saved").await?;
+        Ok(self.list_view().await)
+    }
+
+    pub async fn record_latex_smoke_test(
+        &self,
+        compile_result: LatexCompileResult,
+    ) -> Result<GalleryView> {
+        let now = now_string();
+        let session_id = Uuid::new_v4().to_string();
+        let turn_id = Uuid::new_v4().to_string();
+        let artifact_id = Uuid::new_v4().to_string();
+        let artifact = ArtifactItem {
+            id: artifact_id.clone(),
+            title: if compile_result.ok {
+                "LaTeX Smoke Test".to_string()
+            } else {
+                "LaTeX Smoke Test Failed".to_string()
+            },
+            kind: if compile_result.ok {
+                ArtifactKind::Pdf
+            } else {
+                ArtifactKind::Latex
+            },
+            status: if compile_result.ok {
+                ArtifactStatus::Finished
+            } else {
+                ArtifactStatus::Failed
+            },
+            image_url: None,
+            local_file_path: None,
+            asset_url: None,
+            pdf_url: None,
+            pdf_local_file_path: compile_result.pdf_path.clone(),
+            log_file_path: compile_result.log_path.clone(),
+            stdout_path: Some(compile_result.stdout_path.clone()),
+            stderr_path: Some(compile_result.stderr_path.clone()),
+            svg: None,
+            latex_code: None,
+            source_text: None,
+            mime_type: Some("application/pdf".to_string()),
+            file_extension: Some("pdf".to_string()),
+            error_message: compile_result.error_message.clone(),
+            created_at: now.clone(),
+        };
+
+        {
+            let mut sessions = self.sessions.write().await;
+            for session in &mut *sessions {
+                for turn in &mut session.turns {
+                    turn.collapsed = true;
+                }
+            }
+            sessions.push(ArtifactSession {
+                id: session_id.clone(),
+                title: "LaTeX 环境检测".to_string(),
+                source_kind: SessionSource::Manual,
+                client_name: ClientName::Unknown,
+                group_name: "默认分组".to_string(),
+                project_name: String::new(),
+                project_path: String::new(),
+                created_at: now.clone(),
+                updated_at: now.clone(),
+                turns: vec![ArtifactTurn {
+                    id: turn_id.clone(),
+                    index: 1,
+                    hint: Some("内置 LaTeX smoke test".to_string()),
+                    created_at: now,
+                    artifacts: vec![artifact],
+                    collapsed: false,
+                }],
+            });
+        }
+        *self.selected_session_id.write().await = Some(session_id.clone());
+        self.append_event(
+            "latex_smoke_test_artifact_created",
+            json!({
+                "sidecarSessionId": session_id,
+                "sidecarTurnId": turn_id,
+                "artifactId": artifact_id,
+                "ok": compile_result.ok,
+            }),
+        )
+        .await;
         self.persist_current("gallery_state_saved").await?;
         Ok(self.list_view().await)
     }
@@ -357,6 +442,10 @@ impl GalleryState {
                 local_file_path: None,
                 asset_url: None,
                 pdf_url: None,
+                pdf_local_file_path: None,
+                log_file_path: None,
+                stdout_path: None,
+                stderr_path: None,
                 svg: None,
                 latex_code: None,
                 source_text: None,
@@ -416,6 +505,10 @@ impl GalleryState {
             local_file_path: download.local_file_path.clone(),
             asset_url: None,
             pdf_url: None,
+            pdf_local_file_path: None,
+            log_file_path: None,
+            stdout_path: None,
+            stderr_path: None,
             svg: None,
             latex_code: None,
             source_text: None,

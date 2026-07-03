@@ -21,7 +21,7 @@
     "security": {
       "assetProtocol": {
         "enable": true,
-        "scope": ["$LOCALDATA/ai-artifact-sidecar/data/artifacts/**"]
+        "scope": ["$EXE/**"]
       },
       "csp": null
     }
