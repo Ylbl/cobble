@@ -13,11 +13,11 @@ defineEmits<{
 
 <template>
   <button class="session-item" :class="{ active }" type="button" @click="$emit('click')">
-    <span class="status-dot" :class="session.source.toLowerCase()"></span>
+    <span class="status-dot" :class="(session.clientName ?? 'Unknown').toLowerCase()"></span>
     <span class="session-copy">
       <span class="title">{{ session.title }}</span>
     </span>
-    <span class="updated">{{ session.updatedAt }}</span>
+    <span class="updated">{{ session.updatedAtLabel }}</span>
   </button>
 </template>
 
@@ -66,6 +66,10 @@ defineEmits<{
   background: #a78bfa;
 }
 
+.status-dot.unknown {
+  background: var(--subtle);
+}
+
 .session-copy {
   display: grid;
   min-width: 0;
@@ -87,6 +91,7 @@ defineEmits<{
 .updated {
   color: var(--subtle);
   font-size: 11px;
+  white-space: nowrap;
 }
 
 .active .updated {

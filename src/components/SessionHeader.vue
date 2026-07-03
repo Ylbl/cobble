@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import type { Session } from "../types/gallery";
+import type { McpServerStatus, Session } from "../types/gallery";
 
 defineProps<{
   session: Session;
+  mcpStatus: McpServerStatus;
 }>();
 
 type AppWindow = {
@@ -73,6 +74,11 @@ async function startWindowDrag(event: PointerEvent) {
       <span class="project-badge">▱ {{ session.projectName }}</span>
       <button class="more" type="button" title="更多" @pointerdown.stop @dblclick.stop>…</button>
     </div>
+    <div class="mcp-status">
+      <span class="mcp-dot" :class="{ running: mcpStatus.running }"></span>
+      <span>MCP: {{ mcpStatus.running ? "Running" : "Offline" }}</span>
+      <span v-if="mcpStatus.url" class="mcp-url">{{ mcpStatus.url }}</span>
+    </div>
     <div class="window-actions" aria-label="Window actions">
       <button type="button" title="最小化" @pointerdown.stop @dblclick.stop @click="minimizeWindow">
         −
@@ -129,6 +135,35 @@ async function startWindowDrag(event: PointerEvent) {
   background: #222222;
   color: #b7b7bd;
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-status {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mcp-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--subtle);
+}
+
+.mcp-dot.running {
+  background: var(--ok);
+}
+
+.mcp-url {
+  overflow: hidden;
+  max-width: 280px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

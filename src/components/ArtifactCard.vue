@@ -42,7 +42,8 @@ function closeContextMenu() {
         <span class="preview-line"></span>
         <span class="preview-line short"></span>
         <span v-if="artifact.kind === 'svg'" class="molecule"></span>
-        <span v-if="artifact.kind === 'png'" class="image-mark"></span>
+        <img v-if="artifact.kind === 'image' && artifact.imageUrl" :src="artifact.imageUrl" alt="" />
+        <span v-else-if="artifact.kind === 'image'" class="image-mark"></span>
       </div>
     </div>
     <div class="artifact-body">
@@ -123,6 +124,12 @@ function closeContextMenu() {
   background:
     linear-gradient(135deg, rgba(245, 158, 11, 0.08), transparent 46%),
     linear-gradient(180deg, #232323, #171717);
+}
+
+.preview-sheet img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .preview-kind {
@@ -227,7 +234,7 @@ h2 {
   color: #86efac;
 }
 
-.menu-status.compiling {
+.menu-status.rendering {
   color: #fbbf24;
 }
 

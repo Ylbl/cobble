@@ -1,13 +1,18 @@
-import type { Session } from "../types/gallery";
+import type { GalleryView, Session } from "../types/gallery";
+
+const mockNow = "2026-07-03T00:00:00+08:00";
 
 export const mockSessions: Session[] = [
   {
     id: "aspirin-structure",
     title: "阿司匹林化学结构讨论",
-    source: "ZCode",
+    sourceKind: "mock",
+    clientName: "ZCode",
     projectName: "ZCodeProject",
     projectPath: "C:\\Users\\o\\Desktop\\ZCodeProject",
+    createdAt: mockNow,
     updatedAt: "1 分钟前",
+    updatedAtLabel: "1分",
     artifactCount: 4,
     turns: [
       {
@@ -15,6 +20,7 @@ export const mockSessions: Session[] = [
         index: 1,
         hint: "生成阿司匹林结构式",
         collapsed: true,
+        createdAt: mockNow,
         artifacts: [
           {
             id: "aspirin-pdf",
@@ -22,13 +28,16 @@ export const mockSessions: Session[] = [
             kind: "pdf",
             status: "finished",
             previewType: "large",
+            createdAt: mockNow,
           },
           {
             id: "aspirin-png",
             title: "阿司匹林合成反应.png",
-            kind: "png",
+            kind: "image",
             status: "finished",
             previewType: "small",
+            mimeType: "image/png",
+            createdAt: mockNow,
           },
         ],
       },
@@ -37,13 +46,15 @@ export const mockSessions: Session[] = [
         index: 2,
         hint: "补充反应式和官能团说明",
         collapsed: true,
+        createdAt: mockNow,
         artifacts: [
           {
             id: "aspirin-svg",
             title: "苯环取代反应.svg",
             kind: "svg",
-            status: "compiling",
+            status: "rendering",
             previewType: "large",
+            createdAt: mockNow,
           },
         ],
       },
@@ -52,6 +63,7 @@ export const mockSessions: Session[] = [
         index: 3,
         hint: "复杂电路图",
         collapsed: false,
+        createdAt: mockNow,
         artifacts: [
           {
             id: "rc-circuit",
@@ -59,6 +71,7 @@ export const mockSessions: Session[] = [
             kind: "pdf",
             status: "failed",
             previewType: "small",
+            createdAt: mockNow,
           },
         ],
       },
@@ -67,10 +80,13 @@ export const mockSessions: Session[] = [
   {
     id: "rlc-lab",
     title: "RLC 实验报告图像整理",
-    source: "Codex",
+    sourceKind: "mock",
+    clientName: "Codex",
     projectName: "PhysicsLab",
     projectPath: "C:\\Users\\o\\Documents\\PhysicsLab",
+    createdAt: mockNow,
     updatedAt: "18 分钟前",
+    updatedAtLabel: "18分",
     artifactCount: 6,
     turns: [
       {
@@ -78,6 +94,7 @@ export const mockSessions: Session[] = [
         index: 1,
         hint: "整理示波器截图和报告 PDF",
         collapsed: true,
+        createdAt: mockNow,
         artifacts: [
           {
             id: "rlc-report",
@@ -85,13 +102,16 @@ export const mockSessions: Session[] = [
             kind: "pdf",
             status: "finished",
             previewType: "large",
+            createdAt: mockNow,
           },
           {
             id: "rlc-scope",
             title: "示波器波形.png",
-            kind: "png",
+            kind: "image",
             status: "finished",
             previewType: "small",
+            mimeType: "image/png",
+            createdAt: mockNow,
           },
         ],
       },
@@ -100,6 +120,7 @@ export const mockSessions: Session[] = [
         index: 2,
         hint: "生成相位关系示意",
         collapsed: false,
+        createdAt: mockNow,
         artifacts: [
           {
             id: "rlc-phase",
@@ -107,6 +128,7 @@ export const mockSessions: Session[] = [
             kind: "svg",
             status: "finished",
             previewType: "large",
+            createdAt: mockNow,
           },
         ],
       },
@@ -115,10 +137,13 @@ export const mockSessions: Session[] = [
   {
     id: "resume-assets",
     title: "简历附件 PDF 版本管理",
-    source: "Cursor",
+    sourceKind: "mock",
+    clientName: "Cursor",
     projectName: "CareerDocs",
     projectPath: "C:\\Users\\o\\Desktop\\CareerDocs",
+    createdAt: mockNow,
     updatedAt: "1 小时前",
+    updatedAtLabel: "1时",
     artifactCount: 3,
     turns: [
       {
@@ -126,6 +151,7 @@ export const mockSessions: Session[] = [
         index: 1,
         hint: "导出中文与英文简历",
         collapsed: false,
+        createdAt: mockNow,
         artifacts: [
           {
             id: "resume-cn",
@@ -133,6 +159,7 @@ export const mockSessions: Session[] = [
             kind: "pdf",
             status: "finished",
             previewType: "large",
+            createdAt: mockNow,
           },
           {
             id: "resume-en",
@@ -140,6 +167,7 @@ export const mockSessions: Session[] = [
             kind: "pdf",
             status: "finished",
             previewType: "small",
+            createdAt: mockNow,
           },
         ],
       },
@@ -148,10 +176,13 @@ export const mockSessions: Session[] = [
   {
     id: "latex-paper",
     title: "LaTeX 论文图表预览",
-    source: "ZCode",
+    sourceKind: "mock",
+    clientName: "ZCode",
     projectName: "PaperDraft",
     projectPath: "C:\\Users\\o\\Research\\PaperDraft",
+    createdAt: mockNow,
     updatedAt: "昨天",
+    updatedAtLabel: "昨天",
     artifactCount: 5,
     turns: [
       {
@@ -159,13 +190,15 @@ export const mockSessions: Session[] = [
         index: 1,
         hint: "编译主文档和公式图",
         collapsed: false,
+        createdAt: mockNow,
         artifacts: [
           {
             id: "paper-main",
             title: "main.pdf",
             kind: "latex",
-            status: "compiling",
+            status: "rendering",
             previewType: "large",
+            createdAt: mockNow,
           },
         ],
       },
@@ -174,10 +207,13 @@ export const mockSessions: Session[] = [
   {
     id: "ui-board",
     title: "AI Sidecar UI 参考板",
-    source: "Codex",
+    sourceKind: "mock",
+    clientName: "Codex",
     projectName: "Cobble",
     projectPath: "C:\\Users\\o\\RustroverProjects\\cobble",
+    createdAt: mockNow,
     updatedAt: "2 天前",
+    updatedAtLabel: "2天",
     artifactCount: 8,
     turns: [
       {
@@ -185,16 +221,24 @@ export const mockSessions: Session[] = [
         index: 1,
         hint: "收集深色界面截图",
         collapsed: false,
+        createdAt: mockNow,
         artifacts: [
           {
             id: "ui-shot",
             title: "dark-sidecar-reference.png",
-            kind: "png",
+            kind: "image",
             status: "finished",
             previewType: "large",
+            mimeType: "image/png",
+            createdAt: mockNow,
           },
         ],
       },
     ],
   },
 ];
+
+export const mockGalleryView: GalleryView = {
+  sessions: mockSessions,
+  selectedSessionId: mockSessions[0]?.id ?? null,
+};
