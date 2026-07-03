@@ -1,6 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::settings::types::LatexEngine;
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DisplayArtifactTurnInput {
@@ -31,6 +33,7 @@ pub struct ArtifactInput {
     pub latex_code: Option<String>,
     pub pdf_url: Option<String>,
     pub svg: Option<String>,
+    pub latex_engine: Option<LatexEngine>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -49,10 +52,21 @@ pub struct DisplayArtifactTurnResult {
     pub sidecar_session_id: String,
     pub sidecar_turn_id: String,
     pub artifact_ids: Vec<String>,
+    pub artifact_results: Vec<ArtifactDisplayResult>,
     pub created_new_session: bool,
     pub displayed: bool,
     pub message: String,
     pub reuse_instruction: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactDisplayResult {
+    pub artifact_id: String,
+    pub kind: String,
+    pub status: String,
+    pub pdf_generated: bool,
+    pub message: String,
 }
 
 pub const REUSE_INSTRUCTION: &str =

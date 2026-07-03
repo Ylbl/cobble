@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
+import SourceLogViewer from "./artifacts/SourceLogViewer.vue";
+import PdfJsViewer from "./pdf/PdfJsViewer.vue";
 import { openPath } from "../services/settingsService";
 import type { Artifact } from "../types/gallery";
 
@@ -13,7 +15,17 @@ defineEmits<{
 }>();
 
 const menuOpen = ref(false);
+const viewerOpen = ref(false);
 const menuPosition = reactive({ x: 0, y: 0 });
+
+const pdfUrl = computed(() => props.artifact.pdfAssetUrl || props.artifact.pdfUrl || "");
+const canShowPdf = computed(() => props.artifact.status === "finished" && Boolean(pdfUrl.value));
+const textTargets = computed(() => [
+  { label: "源码", path: props.artifact.sourceFilePath },
+  { label: "main.log", path: props.artifact.logFilePath },
+  { label: "stdout", path: props.artifact.stdoutPath },
+  { label: "stderr", path: props.artifact.stderrPath },
+]);
 
 function openContextMenu(event: MouseEvent) {
   event.preventDefault();
@@ -32,6 +44,28 @@ async function openArtifactPath(path?: string | null) {
   }
   closeContextMenu();
 }
+
+async function openArtifactDirectory() {
+  const path =
+    props.artifact.sourceFilePath ||
+    props.artifact.pdfLocalFilePath ||
+    props.artifact.localFilePath ||
+    props.artifact.logFilePath;
+  if (path) {
+    await openPath(parentPath(path));
+  }
+  closeContextMenu();
+}
+
+function showTextViewer() {
+  viewerOpen.value = true;
+  closeContextMenu();
+}
+
+function parentPath(path: string) {
+  const index = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
+  return index > 0 ? path.slice(0, index) : path;
+}
 </script>
 
 <template>
@@ -45,24 +79,48 @@ async function openArtifactPath(path?: string | null) {
   >
     <div class="preview">
       <div class="preview-sheet">
-        <span class="preview-kind">{{ artifact.kind.toUpperCase() }}</span>
-        <span class="preview-line wide"></span>
-        <span class="preview-line"></span>
-        <span class="preview-line short"></span>
-        <span v-if="artifact.kind === 'svg'" class="molecule"></span>
         <img
           v-if="artifact.kind === 'image' && (artifact.assetUrl || artifact.imageUrl)"
           :src="artifact.assetUrl || artifact.imageUrl || ''"
           alt=""
         />
-        <span v-else-if="artifact.kind === 'image'" class="image-mark"></span>
+        <PdfJsViewer
+          v-else-if="canShowPdf"
+          :pdf-url="pdfUrl"
+          :artifact-id="artifact.id"
+          :local-file-path="artifact.pdfLocalFilePath"
+          :initial-scale="0.85"
+        />
+        <template v-else>
+          <span class="preview-kind">{{ artifact.kind.toUpperCase() }}</span>
+          <span class="preview-line wide"></span>
+          <span class="preview-line"></span>
+          <span class="preview-line short"></span>
+          <span v-if="artifact.kind === 'svg'" class="molecule"></span>
+          <span v-else-if="artifact.kind === 'image'" class="image-mark"></span>
+          <span v-if="artifact.status === 'compiling' || artifact.status === 'rendering'" class="state-pill">
+            正在编译
+          </span>
+          <span v-if="artifact.status === 'failed'" class="state-pill failed">编译失败</span>
+        </template>
       </div>
     </div>
     <div class="artifact-body">
       <h2>{{ artifact.title }}</h2>
-      <p v-if="artifact.pdfLocalFilePath">PDF 已生成：{{ artifact.pdfLocalFilePath }}</p>
-      <p v-if="artifact.logFilePath">日志：{{ artifact.logFilePath }}</p>
       <p v-if="artifact.status === 'failed' && artifact.errorMessage">{{ artifact.errorMessage }}</p>
+      <div class="artifact-actions">
+        <button v-if="artifact.pdfLocalFilePath" type="button" @click.stop="openArtifactPath(artifact.pdfLocalFilePath)">
+          打开 PDF
+        </button>
+        <button
+          v-if="artifact.sourceFilePath || artifact.logFilePath || artifact.stdoutPath || artifact.stderrPath"
+          type="button"
+          @click.stop="showTextViewer"
+        >
+          查看源码 / 日志
+        </button>
+        <button type="button" @click.stop="openArtifactDirectory">打开目录</button>
+      </div>
     </div>
     <Teleport to="body">
       <button v-if="menuOpen" class="context-backdrop" type="button" @click="closeContextMenu"></button>
@@ -78,13 +136,18 @@ async function openArtifactPath(path?: string | null) {
           <span :class="['menu-status', artifact.status]">{{ artifact.status }}</span>
         </div>
         <button type="button" role="menuitem" @click="openArtifactPath(props.artifact.pdfLocalFilePath || props.artifact.localFilePath)">
-          打开
+          打开文件
         </button>
-        <button type="button" role="menuitem" @click="closeContextMenu">复制路径</button>
-        <button type="button" role="menuitem" @click="closeContextMenu">查看源码</button>
-        <button type="button" role="menuitem" @click="openArtifactPath(props.artifact.logFilePath || props.artifact.stderrPath)">查看日志</button>
+        <button type="button" role="menuitem" @click="openArtifactDirectory">打开目录</button>
+        <button type="button" role="menuitem" @click="showTextViewer">查看源码 / 日志</button>
       </div>
     </Teleport>
+    <SourceLogViewer
+      v-if="viewerOpen"
+      :title="artifact.title"
+      :targets="textTargets"
+      @close="viewerOpen = false"
+    />
   </article>
 </template>
 
@@ -118,7 +181,7 @@ async function openArtifactPath(path?: string | null) {
 }
 
 .preview {
-  height: 174px;
+  height: 236px;
   padding: 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background:
@@ -128,7 +191,7 @@ async function openArtifactPath(path?: string | null) {
 }
 
 .small .preview {
-  height: 132px;
+  height: 172px;
 }
 
 .preview-sheet {
@@ -200,6 +263,23 @@ async function openArtifactPath(path?: string | null) {
     rgba(255, 255, 255, 0.08);
 }
 
+.state-pill {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.state-pill.failed {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+
 .artifact-body {
   padding: 12px;
 }
@@ -225,6 +305,23 @@ p {
   white-space: nowrap;
 }
 
+.artifact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.artifact-actions button {
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #202020;
+  color: #d4d4d8;
+  cursor: pointer;
+  font-size: 12px;
+}
+
 .context-backdrop {
   position: fixed;
   inset: 0;
@@ -238,7 +335,7 @@ p {
   position: fixed;
   z-index: 21;
   display: grid;
-  width: 148px;
+  width: 168px;
   padding: 6px;
   border: 1px solid var(--border-strong);
   border-radius: 7px;
@@ -261,7 +358,8 @@ p {
   color: #86efac;
 }
 
-.menu-status.rendering {
+.menu-status.rendering,
+.menu-status.compiling {
   color: #fbbf24;
 }
 

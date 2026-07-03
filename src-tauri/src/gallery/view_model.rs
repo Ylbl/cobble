@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 
@@ -79,12 +81,16 @@ pub struct GalleryArtifactView {
     pub asset_url: Option<String>,
     pub pdf_url: Option<String>,
     pub pdf_local_file_path: Option<String>,
+    pub pdf_asset_url: Option<String>,
     pub log_file_path: Option<String>,
     pub stdout_path: Option<String>,
     pub stderr_path: Option<String>,
     pub svg: Option<String>,
     pub latex_code: Option<String>,
+    pub source_file_path: Option<String>,
     pub mime_type: Option<String>,
+    pub latex_engine: Option<crate::settings::types::LatexEngine>,
+    pub compile_elapsed_ms: Option<u128>,
     pub error_message: Option<String>,
     pub created_at: String,
 }
@@ -119,6 +125,7 @@ pub enum ArtifactKindView {
 pub enum ArtifactStatusView {
     Received,
     Rendering,
+    Compiling,
     Finished,
     Failed,
 }
@@ -210,20 +217,48 @@ fn to_turn_view(turn: ArtifactTurn) -> GalleryTurnView {
                     ArtifactPreviewTypeView::Small
                 },
                 image_url: artifact.image_url,
-                local_file_path: artifact.local_file_path,
+                local_file_path: normalize_existing_path(artifact.local_file_path),
                 asset_url: artifact.asset_url,
                 pdf_url: artifact.pdf_url,
-                pdf_local_file_path: artifact.pdf_local_file_path,
-                log_file_path: artifact.log_file_path,
-                stdout_path: artifact.stdout_path,
-                stderr_path: artifact.stderr_path,
+                pdf_local_file_path: normalize_existing_path(artifact.pdf_local_file_path),
+                pdf_asset_url: artifact.pdf_asset_url,
+                log_file_path: normalize_existing_path(artifact.log_file_path),
+                stdout_path: normalize_existing_path(artifact.stdout_path),
+                stderr_path: normalize_existing_path(artifact.stderr_path),
                 svg: artifact.svg,
                 latex_code: artifact.latex_code,
+                source_file_path: normalize_existing_path(artifact.source_file_path),
                 mime_type: artifact.mime_type,
+                latex_engine: artifact.latex_engine,
+                compile_elapsed_ms: artifact.compile_elapsed_ms,
                 error_message: artifact.error_message,
                 created_at: artifact.created_at,
             })
             .collect(),
+    }
+}
+
+fn normalize_existing_path(path: Option<String>) -> Option<String> {
+    let path = path?;
+    let candidate = Path::new(&path);
+    Some(
+        strip_windows_verbatim_prefix(
+            candidate
+            .canonicalize()
+            .unwrap_or_else(|_| candidate.to_path_buf())
+            .to_string_lossy()
+            .as_ref(),
+        ),
+    )
+}
+
+fn strip_windows_verbatim_prefix(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = path.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        path.to_string()
     }
 }
 
@@ -257,6 +292,7 @@ fn status_to_view(status: ArtifactStatus) -> ArtifactStatusView {
     match status {
         ArtifactStatus::Received => ArtifactStatusView::Received,
         ArtifactStatus::Rendering => ArtifactStatusView::Rendering,
+        ArtifactStatus::Compiling => ArtifactStatusView::Compiling,
         ArtifactStatus::Finished => ArtifactStatusView::Finished,
         ArtifactStatus::Failed => ArtifactStatusView::Failed,
     }

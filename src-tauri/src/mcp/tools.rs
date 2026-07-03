@@ -8,11 +8,21 @@ use tauri::Manager;
 use crate::{
     gallery::{debug_artifacts, events, state::GalleryState},
     mcp::types::{DisplayArtifactTurnInput, DisplayArtifactTurnResult},
+    settings::state::ConfigState,
 };
 
-const MCP_INSTRUCTIONS: &str = r#"This server displays artifacts in a running Sidecar App.
+const MCP_INSTRUCTIONS: &str = r#"This Sidecar App can display image artifacts and compile LaTeX artifacts into PDF.
 
-Use display_artifact_turn when the user asks to display an image, PDF, LaTeX artifact, diagram, circuit, chemical structure, or visual output.
+Use display_artifact_turn when the user asks to display a diagram, circuit, chemical structure, formula card, LaTeX figure, TikZ figure, image artifact, or other visual artifact.
+
+For image output, send kind = "image" and include imageUrl.
+
+For LaTeX output, send kind = "latex" and include full latexCode.
+
+The latexCode should be a complete compilable LaTeX document, not only a fragment.
+
+Prefer standalone document class for diagrams:
+\documentclass[tikz,border=6pt]{standalone}
 
 One assistant response should call display_artifact_turn once.
 
@@ -24,9 +34,7 @@ If no sidecarSessionId exists, omit sidecarSessionId and provide a clear session
 
 Do not invent sidecarSessionId.
 
-First version supports image artifacts through imageUrl.
-
-LaTeX and PDF support will be implemented later."#;
+The Sidecar App will compile LaTeX using its configured engine and show the resulting PDF."#;
 
 #[derive(Debug, Clone)]
 pub struct SidecarMcpService {
@@ -62,8 +70,9 @@ impl SidecarMcpService {
         );
 
         let state = self.app.state::<GalleryState>();
+        let config = self.app.state::<ConfigState>().get_config().await;
         let snapshot_before = state.snapshot().await;
-        let result = state.display_artifact_turn(input.clone()).await;
+        let result = state.display_artifact_turn(input.clone(), config).await;
         let snapshot_after = state.snapshot().await;
         let view = state.list_view().await;
         if let Err(error) = debug_artifacts::write_run(

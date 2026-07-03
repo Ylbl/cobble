@@ -45,6 +45,9 @@ impl AppPaths {
         config: &SidecarConfig,
     ) -> Result<Self> {
         let data_dir = resolve_data_dir(&instance_dir, &config.paths.data_dir);
+        fs::create_dir_all(&data_dir)
+            .with_context(|| format!("creating {}", data_dir.display()))?;
+        let data_dir = normalize_path(&data_dir);
         Ok(Self {
             gallery_state_path: data_dir.join("gallery-state.json"),
             gallery_events_path: data_dir.join("gallery-events.jsonl"),
@@ -126,5 +129,19 @@ fn resolve_data_dir(instance_dir: &Path, configured: &str) -> PathBuf {
 }
 
 fn path_to_string(path: &Path) -> String {
-    path.to_string_lossy().to_string()
+    strip_windows_verbatim_prefix(path.to_string_lossy().as_ref())
+}
+
+fn normalize_path(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn strip_windows_verbatim_prefix(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = path.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        path.to_string()
+    }
 }

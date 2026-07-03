@@ -53,6 +53,10 @@ pub fn run() {
             commands::gallery::open_path,
             commands::gallery::run_latex_environment_check,
             commands::gallery::run_latex_smoke_test,
+            commands::file::read_text_file,
+            commands::file::read_binary_file,
+            commands::file::record_pdfjs_preview_requested,
+            commands::file::diagnose_pdf_asset_path,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();

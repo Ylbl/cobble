@@ -21,7 +21,7 @@
     "security": {
       "assetProtocol": {
         "enable": true,
-        "scope": ["$EXE/**"]
+        "scope": ["$EXE/../**"]
       },
       "csp": null
     }

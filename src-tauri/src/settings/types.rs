@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::gallery::types::SidebarMode;
@@ -60,7 +61,7 @@ pub struct PathConfig {
     pub data_dir: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum LatexEngine {
     Pdflatex,

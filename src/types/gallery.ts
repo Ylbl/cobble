@@ -4,7 +4,7 @@ export type SessionClientName = "ZCode" | "Codex" | "Cursor" | "Unknown";
 
 export type ArtifactKind = "image" | "pdf" | "latex" | "svg";
 
-export type ArtifactStatus = "received" | "rendering" | "finished" | "failed";
+export type ArtifactStatus = "received" | "rendering" | "compiling" | "finished" | "failed";
 
 export type ArtifactPreviewType = "large" | "small";
 
@@ -68,12 +68,16 @@ export type GalleryArtifactView = {
   assetUrl?: string | null;
   pdfUrl?: string | null;
   pdfLocalFilePath?: string | null;
+  pdfAssetUrl?: string | null;
   logFilePath?: string | null;
   stdoutPath?: string | null;
   stderrPath?: string | null;
   svg?: string | null;
   latexCode?: string | null;
+  sourceFilePath?: string | null;
   mimeType?: string | null;
+  latexEngine?: LatexEngine | null;
+  compileElapsedMs?: number | null;
   errorMessage?: string | null;
   createdAt: string;
 };
@@ -145,11 +149,16 @@ export type LatexPackageStatus = {
 
 export type LatexCompileResult = {
   ok: boolean;
+  artifactId: string;
   engine: LatexEngine;
+  elapsedMs: number;
   workDir: string;
   mainTexPath: string;
+  sourceFilePath: string;
   pdfPath?: string | null;
+  pdfFilePath?: string | null;
   logPath?: string | null;
+  logFilePath?: string | null;
   stdoutPath: string;
   stderrPath: string;
   exitCode?: number | null;

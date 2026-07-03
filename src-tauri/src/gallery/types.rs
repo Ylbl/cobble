@@ -54,14 +54,18 @@ pub struct ArtifactItem {
     pub asset_url: Option<String>,
     pub pdf_url: Option<String>,
     pub pdf_local_file_path: Option<String>,
+    pub pdf_asset_url: Option<String>,
     pub log_file_path: Option<String>,
     pub stdout_path: Option<String>,
     pub stderr_path: Option<String>,
     pub svg: Option<String>,
     pub latex_code: Option<String>,
+    pub source_file_path: Option<String>,
     pub source_text: Option<String>,
     pub mime_type: Option<String>,
     pub file_extension: Option<String>,
+    pub latex_engine: Option<crate::settings::types::LatexEngine>,
+    pub compile_elapsed_ms: Option<u128>,
     pub error_message: Option<String>,
     pub created_at: String,
 }
@@ -80,6 +84,7 @@ pub enum ArtifactKind {
 pub enum ArtifactStatus {
     Received,
     Rendering,
+    Compiling,
     Finished,
     Failed,
 }

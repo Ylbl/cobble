@@ -9,10 +9,10 @@ use crate::{
     app_paths::AppPaths,
     gallery::{
         persistence::GallerySnapshot,
-        types::{ArtifactItem, ArtifactSession, ArtifactTurn},
+        types::{ArtifactItem, ArtifactKind, ArtifactSession, ArtifactTurn},
         view_model::GalleryView,
     },
-    mcp::types::{DisplayArtifactTurnInput, DisplayArtifactTurnResult},
+    mcp::types::{ArtifactInputKind, DisplayArtifactTurnInput, DisplayArtifactTurnResult},
 };
 
 #[derive(Debug, Serialize)]
@@ -83,12 +83,24 @@ pub fn write_run(
     });
 
     write_json(run_dir.join("mcp-request.json"), input)?;
+    if let Some(latex_input) = input
+        .artifacts
+        .iter()
+        .find(|artifact| matches!(artifact.kind, ArtifactInputKind::Latex))
+    {
+        write_json(run_dir.join("latex-artifact-input.json"), latex_input)?;
+        if let Some(code) = latex_input.latex_code.as_deref() {
+            fs::write(run_dir.join("latex-source-main.tex"), code)
+                .with_context(|| format!("writing {}", run_dir.join("latex-source-main.tex").display()))?;
+        }
+    }
     write_json(run_dir.join("image-download-plan.json"), &image_plan(input))?;
     if let Some(turn) = turn {
         write_json(
             run_dir.join("image-download-result.json"),
             &image_results(turn, result),
         )?;
+        write_latex_evidence(&run_dir, turn, result)?;
     }
     write_json(run_dir.join("persistence-before.json"), snapshot_before)?;
     write_json(run_dir.join("persistence-after.json"), snapshot_after)?;
@@ -160,6 +172,77 @@ fn copy_event_log(app_paths: &AppPaths, run_dir: &std::path::Path) -> anyhow::Re
         })?;
     } else {
         fs::write(&output_path, "")?;
+    }
+    Ok(())
+}
+
+fn write_latex_evidence(
+    run_dir: &std::path::Path,
+    turn: &ArtifactTurn,
+    result: &DisplayArtifactTurnResult,
+) -> anyhow::Result<()> {
+    let Some(artifact) = turn.artifacts.iter().find(|artifact| {
+        result.artifact_ids.contains(&artifact.id) && matches!(artifact.kind, ArtifactKind::Latex)
+    }) else {
+        return Ok(());
+    };
+
+    write_json(
+        run_dir.join("latex-compile-command.json"),
+        &serde_json::json!({
+            "artifactId": artifact.id,
+            "engine": artifact.latex_engine,
+            "workDir": artifact.source_file_path.as_deref().and_then(|path| std::path::Path::new(path).parent()).map(|path| path.display().to_string()),
+            "command": [
+                "latexmk",
+                artifact.latex_engine.as_ref().map(|engine| engine.latexmk_arg()).unwrap_or(""),
+                "-interaction=nonstopmode",
+                "-halt-on-error",
+                "-file-line-error",
+                "-outdir=out",
+                "main.tex"
+            ],
+        }),
+    )?;
+    write_json(
+        run_dir.join("latex-compile-result.json"),
+        &serde_json::json!({
+            "artifactId": artifact.id,
+            "status": artifact.status,
+            "pdfLocalFilePath": artifact.pdf_local_file_path,
+            "sourceFilePath": artifact.source_file_path,
+            "logFilePath": artifact.log_file_path,
+            "stdoutPath": artifact.stdout_path,
+            "stderrPath": artifact.stderr_path,
+            "compileElapsedMs": artifact.compile_elapsed_ms,
+            "errorMessage": artifact.error_message,
+        }),
+    )?;
+
+    copy_optional_file(run_dir, "latex-source-main.tex", artifact.source_file_path.as_deref())?;
+    copy_optional_file(run_dir, "latex-stdout.txt", artifact.stdout_path.as_deref())?;
+    copy_optional_file(run_dir, "latex-stderr.txt", artifact.stderr_path.as_deref())?;
+    copy_optional_file(run_dir, "latex-main.log", artifact.log_file_path.as_deref())?;
+    Ok(())
+}
+
+fn copy_optional_file(
+    run_dir: &std::path::Path,
+    output_name: &str,
+    source: Option<&str>,
+) -> anyhow::Result<()> {
+    let Some(source) = source else {
+        return Ok(());
+    };
+    let source_path = std::path::Path::new(source);
+    if source_path.exists() {
+        fs::copy(source_path, run_dir.join(output_name)).with_context(|| {
+            format!(
+                "copying {} to {}",
+                source_path.display(),
+                run_dir.join(output_name).display()
+            )
+        })?;
     }
     Ok(())
 }

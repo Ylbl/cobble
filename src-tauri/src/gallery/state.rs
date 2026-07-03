@@ -18,11 +18,15 @@ use crate::{
         },
         view_model::{to_gallery_view, GalleryView},
     },
-    latex::types::LatexCompileResult,
-    mcp::types::{
-        ArtifactInput, ArtifactInputKind, ClientName as InputClientName, DisplayArtifactTurnInput,
-        DisplayArtifactTurnResult, REUSE_INSTRUCTION,
+    latex::{
+        compiler,
+        types::{LatexCompileRequest, LatexCompileResult},
     },
+    mcp::types::{
+        ArtifactDisplayResult, ArtifactInput, ArtifactInputKind, ClientName as InputClientName,
+        DisplayArtifactTurnInput, DisplayArtifactTurnResult, REUSE_INSTRUCTION,
+    },
+    settings::types::SidecarConfig,
 };
 
 pub struct GalleryState {
@@ -203,14 +207,18 @@ impl GalleryState {
             asset_url: None,
             pdf_url: None,
             pdf_local_file_path: compile_result.pdf_path.clone(),
+            pdf_asset_url: None,
             log_file_path: compile_result.log_path.clone(),
             stdout_path: Some(compile_result.stdout_path.clone()),
             stderr_path: Some(compile_result.stderr_path.clone()),
             svg: None,
             latex_code: None,
+            source_file_path: Some(compile_result.source_file_path.clone()),
             source_text: None,
             mime_type: Some("application/pdf".to_string()),
             file_extension: Some("pdf".to_string()),
+            latex_engine: Some(compile_result.engine.clone()),
+            compile_elapsed_ms: Some(compile_result.elapsed_ms),
             error_message: compile_result.error_message.clone(),
             created_at: now.clone(),
         };
@@ -260,10 +268,11 @@ impl GalleryState {
     pub async fn display_artifact_turn(
         &self,
         input: DisplayArtifactTurnInput,
+        config: SidecarConfig,
     ) -> DisplayArtifactTurnResult {
         tracing::info!(target: "sidecar", artifact_count = input.artifacts.len(), "display_artifact_turn received");
 
-        let prepared_artifacts = self.prepare_artifacts(&input.artifacts).await;
+        let prepared_artifacts = self.prepare_artifacts(&input.artifacts, &config).await;
 
         let mut created_new_session = false;
         let mut session_created_event = None;
@@ -367,6 +376,8 @@ impl GalleryState {
             )
             .await;
         }
+        self.append_lifecycle_events(&sidecar_session_id, &turn_id)
+            .await;
 
         if let Err(error) = self.persist_current("gallery_state_saved").await {
             tracing::error!(target: "sidecar", ?error, "failed to persist gallery state");
@@ -381,23 +392,30 @@ impl GalleryState {
             "display_artifact_turn completed"
         );
 
+        let artifact_results = self.artifact_results(&artifact_ids).await;
+
         DisplayArtifactTurnResult {
             ok: true,
             sidecar_session_id,
             sidecar_turn_id: turn_id,
             artifact_ids,
+            artifact_results,
             created_new_session,
             displayed,
             message: if displayed {
                 "Artifacts displayed in Sidecar.".to_string()
             } else {
-                "No supported image artifacts were provided.".to_string()
+                "No supported artifacts were provided.".to_string()
             },
             reuse_instruction: REUSE_INSTRUCTION.to_string(),
         }
     }
 
-    async fn prepare_artifacts(&self, artifacts: &[ArtifactInput]) -> Vec<ArtifactItem> {
+    async fn prepare_artifacts(
+        &self,
+        artifacts: &[ArtifactInput],
+        config: &SidecarConfig,
+    ) -> Vec<ArtifactItem> {
         let mut prepared = Vec::new();
         let now = now_string();
 
@@ -407,6 +425,18 @@ impl GalleryState {
                     let artifact_id = Uuid::new_v4().to_string();
                     let item = self
                         .prepare_image_artifact(artifact, artifact_id, &now)
+                        .await;
+                    if let Err(error) =
+                        image_cache::write_artifact_manifest(&self.app_paths, &item.id, &item).await
+                    {
+                        tracing::error!(target: "sidecar", ?error, artifact_id = %item.id, "failed to write artifact manifest");
+                    }
+                    prepared.push(item);
+                }
+                ArtifactInputKind::Latex => {
+                    let artifact_id = format!("art_{}", Uuid::new_v4());
+                    let item = self
+                        .prepare_latex_artifact(artifact, artifact_id, &now, config)
                         .await;
                     if let Err(error) =
                         image_cache::write_artifact_manifest(&self.app_paths, &item.id, &item).await
@@ -443,14 +473,18 @@ impl GalleryState {
                 asset_url: None,
                 pdf_url: None,
                 pdf_local_file_path: None,
+                pdf_asset_url: None,
                 log_file_path: None,
                 stdout_path: None,
                 stderr_path: None,
                 svg: None,
                 latex_code: None,
+                source_file_path: None,
                 source_text: None,
                 mime_type: None,
                 file_extension: None,
+                latex_engine: None,
+                compile_elapsed_ms: None,
                 error_message: Some(error_message),
                 created_at: now.to_string(),
             };
@@ -506,17 +540,289 @@ impl GalleryState {
             asset_url: None,
             pdf_url: None,
             pdf_local_file_path: None,
+            pdf_asset_url: None,
             log_file_path: None,
             stdout_path: None,
             stderr_path: None,
             svg: None,
             latex_code: None,
+            source_file_path: None,
             source_text: None,
             mime_type: download.content_type.clone(),
             file_extension: download.file_extension.clone(),
+            latex_engine: None,
+            compile_elapsed_ms: None,
             error_message: download.error_message.clone(),
             created_at: now.to_string(),
         }
+    }
+
+    async fn prepare_latex_artifact(
+        &self,
+        artifact: &ArtifactInput,
+        artifact_id: String,
+        now: &str,
+        config: &SidecarConfig,
+    ) -> ArtifactItem {
+        let Some(latex_code) = artifact.latex_code.clone().filter(|value| !value.trim().is_empty())
+        else {
+            let error_message = "latex artifact requires latexCode".to_string();
+            tracing::warn!(target: "sidecar", artifact_id = %artifact_id, "latex artifact missing latexCode");
+            return ArtifactItem {
+                id: artifact_id,
+                title: artifact.title.clone(),
+                kind: ArtifactKind::Latex,
+                status: ArtifactStatus::Failed,
+                image_url: None,
+                local_file_path: None,
+                asset_url: None,
+                pdf_url: None,
+                pdf_local_file_path: None,
+                pdf_asset_url: None,
+                log_file_path: None,
+                stdout_path: None,
+                stderr_path: None,
+                svg: None,
+                latex_code: None,
+                source_file_path: None,
+                source_text: None,
+                mime_type: None,
+                file_extension: None,
+                latex_engine: artifact.latex_engine.clone(),
+                compile_elapsed_ms: None,
+                error_message: Some(error_message),
+                created_at: now.to_string(),
+            };
+        };
+
+        let engine = artifact
+            .latex_engine
+            .clone()
+            .unwrap_or_else(|| config.latex.engine.clone());
+        let work_dir = self
+            .app_paths
+            .artifacts_dir
+            .join(sanitize_filename::sanitize(&artifact_id));
+
+        tracing::info!(
+            target: "sidecar",
+            artifact_id = %artifact_id,
+            latex_chars = latex_code.chars().count(),
+            engine = ?engine,
+            work_dir = %work_dir.display(),
+            "MCP latex artifact received"
+        );
+        self.append_event(
+            "latex_artifact_received",
+            json!({
+                "artifactId": artifact_id,
+                "title": artifact.title,
+                "latexChars": latex_code.chars().count(),
+                "engine": engine,
+                "workDir": work_dir,
+            }),
+        )
+        .await;
+        self.append_event(
+            "latex_compile_started",
+            json!({
+                "artifactId": artifact_id,
+                "engine": engine,
+                "workDir": work_dir,
+                "timeoutSeconds": config.latex.compile_timeout_seconds,
+            }),
+        )
+        .await;
+
+        let compile = compiler::compile_latex_artifact(LatexCompileRequest {
+            artifact_id: artifact_id.clone(),
+            title: artifact.title.clone(),
+            latex_code: latex_code.clone(),
+            engine: engine.clone(),
+            work_dir: work_dir.to_string_lossy().to_string(),
+            timeout_seconds: config.latex.compile_timeout_seconds,
+        })
+        .await;
+
+        match compile {
+            Ok(result) => {
+                let status = if result.ok {
+                    ArtifactStatus::Finished
+                } else {
+                    ArtifactStatus::Failed
+                };
+                self.append_event(
+                    "latex_source_written",
+                    json!({
+                        "artifactId": artifact_id,
+                        "sourceFilePath": result.source_file_path,
+                    }),
+                )
+                .await;
+                self.append_event(
+                    if result.ok {
+                        "latex_compile_finished"
+                    } else {
+                        "latex_compile_failed"
+                    },
+                    json!({
+                        "artifactId": artifact_id,
+                        "engine": result.engine,
+                        "elapsedMs": result.elapsed_ms,
+                        "exitCode": result.exit_code,
+                        "pdfFilePath": result.pdf_file_path,
+                        "logFilePath": result.log_file_path,
+                        "stdoutPath": result.stdout_path,
+                        "stderrPath": result.stderr_path,
+                        "errorMessage": result.error_message,
+                    }),
+                )
+                .await;
+                self.append_event(
+                    "artifact_log_saved",
+                    json!({
+                        "artifactId": artifact_id,
+                        "logFilePath": result.log_file_path,
+                        "stdoutPath": result.stdout_path,
+                        "stderrPath": result.stderr_path,
+                    }),
+                )
+                .await;
+                if result.ok {
+                    self.append_event(
+                        "pdf_artifact_ready",
+                        json!({
+                            "artifactId": artifact_id,
+                            "pdfFilePath": result.pdf_file_path,
+                        }),
+                    )
+                    .await;
+                }
+                tracing::info!(
+                    target: "sidecar",
+                    artifact_id = %artifact_id,
+                    status = ?status,
+                    pdf_exists = result.pdf_file_path.is_some(),
+                    elapsed_ms = result.elapsed_ms,
+                    "latex artifact status updated"
+                );
+                ArtifactItem {
+                    id: artifact_id,
+                    title: artifact.title.clone(),
+                    kind: ArtifactKind::Latex,
+                    status,
+                    image_url: None,
+                    local_file_path: None,
+                    asset_url: None,
+                    pdf_url: None,
+                    pdf_local_file_path: result.pdf_file_path.clone(),
+                    pdf_asset_url: None,
+                    log_file_path: result.log_file_path.clone(),
+                    stdout_path: Some(result.stdout_path.clone()),
+                    stderr_path: Some(result.stderr_path.clone()),
+                    svg: None,
+                    latex_code: Some(latex_code),
+                    source_file_path: Some(result.source_file_path.clone()),
+                    source_text: None,
+                    mime_type: result.ok.then(|| "application/pdf".to_string()),
+                    file_extension: result.ok.then(|| "pdf".to_string()),
+                    latex_engine: Some(result.engine.clone()),
+                    compile_elapsed_ms: Some(result.elapsed_ms),
+                    error_message: result.error_message.clone(),
+                    created_at: now.to_string(),
+                }
+            }
+            Err(error) => {
+                let message = error.to_string();
+                self.append_event(
+                    "latex_compile_failed",
+                    json!({
+                        "artifactId": artifact_id,
+                        "errorMessage": message,
+                    }),
+                )
+                .await;
+                ArtifactItem {
+                    id: artifact_id,
+                    title: artifact.title.clone(),
+                    kind: ArtifactKind::Latex,
+                    status: ArtifactStatus::Failed,
+                    image_url: None,
+                    local_file_path: None,
+                    asset_url: None,
+                    pdf_url: None,
+                    pdf_local_file_path: None,
+                    pdf_asset_url: None,
+                    log_file_path: None,
+                    stdout_path: None,
+                    stderr_path: None,
+                    svg: None,
+                    latex_code: Some(latex_code),
+                    source_file_path: None,
+                    source_text: None,
+                    mime_type: None,
+                    file_extension: None,
+                    latex_engine: Some(engine),
+                    compile_elapsed_ms: None,
+                    error_message: Some(message),
+                    created_at: now.to_string(),
+                }
+            }
+        }
+    }
+
+    async fn append_lifecycle_events(&self, session_id: &str, turn_id: &str) {
+        let payloads = {
+            let sessions = self.sessions.read().await;
+            let Some(session) = sessions.iter().find(|item| item.id == session_id) else {
+                return;
+            };
+            let Some(turn) = session.turns.iter().find(|item| item.id == turn_id) else {
+                return;
+            };
+            turn.artifacts
+                .iter()
+                .filter(|artifact| matches!(artifact.kind, ArtifactKind::Latex))
+                .map(|artifact| {
+                    json!({
+                        "sessionId": session_id,
+                        "turnId": turn_id,
+                        "artifactId": artifact.id,
+                        "status": artifact.status,
+                        "summary": artifact.error_message.clone().unwrap_or_else(|| "latex artifact processed".to_string()),
+                        "paths": {
+                            "sourceFilePath": artifact.source_file_path,
+                            "pdfLocalFilePath": artifact.pdf_local_file_path,
+                            "logFilePath": artifact.log_file_path,
+                            "stdoutPath": artifact.stdout_path,
+                            "stderrPath": artifact.stderr_path,
+                        }
+                    })
+                })
+                .collect::<Vec<_>>()
+        };
+
+        for payload in payloads {
+            self.append_event("latex_artifact_lifecycle", payload).await;
+        }
+    }
+
+    async fn artifact_results(&self, artifact_ids: &[String]) -> Vec<ArtifactDisplayResult> {
+        let sessions = self.sessions.read().await;
+        sessions
+            .iter()
+            .flat_map(|session| &session.turns)
+            .flat_map(|turn| &turn.artifacts)
+            .filter(|artifact| artifact_ids.contains(&artifact.id))
+            .map(|artifact| ArtifactDisplayResult {
+                artifact_id: artifact.id.clone(),
+                kind: artifact_kind_label(&artifact.kind).to_string(),
+                status: artifact_status_label(&artifact.status).to_string(),
+                pdf_generated: artifact.pdf_local_file_path.is_some()
+                    && matches!(artifact.status, ArtifactStatus::Finished),
+                message: artifact_result_message(artifact),
+            })
+            .collect()
     }
 
     async fn persist_current(&self, event_type: &str) -> Result<()> {
@@ -577,6 +883,44 @@ fn input_client_to_domain(client_name: Option<InputClientName>) -> ClientName {
         InputClientName::ZCode => ClientName::ZCode,
         InputClientName::Cursor => ClientName::Cursor,
         InputClientName::Unknown => ClientName::Unknown,
+    }
+}
+
+fn artifact_kind_label(kind: &ArtifactKind) -> &'static str {
+    match kind {
+        ArtifactKind::Image => "image",
+        ArtifactKind::Pdf => "pdf",
+        ArtifactKind::Latex => "latex",
+        ArtifactKind::Svg => "svg",
+    }
+}
+
+fn artifact_status_label(status: &ArtifactStatus) -> &'static str {
+    match status {
+        ArtifactStatus::Received => "received",
+        ArtifactStatus::Rendering => "rendering",
+        ArtifactStatus::Compiling => "compiling",
+        ArtifactStatus::Finished => "finished",
+        ArtifactStatus::Failed => "failed",
+    }
+}
+
+fn artifact_result_message(artifact: &ArtifactItem) -> String {
+    match (&artifact.kind, &artifact.status) {
+        (ArtifactKind::Latex, ArtifactStatus::Finished) => {
+            "LaTeX compiled successfully and PDF is displayed in Sidecar.".to_string()
+        }
+        (ArtifactKind::Latex, ArtifactStatus::Failed) => {
+            "LaTeX compilation failed. Check source and log in Sidecar.".to_string()
+        }
+        (ArtifactKind::Image, ArtifactStatus::Finished) => {
+            "Image downloaded and displayed in Sidecar.".to_string()
+        }
+        (_, ArtifactStatus::Failed) => artifact
+            .error_message
+            .clone()
+            .unwrap_or_else(|| "Artifact processing failed.".to_string()),
+        _ => "Artifact processed in Sidecar.".to_string(),
     }
 }
 

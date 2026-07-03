@@ -65,10 +65,25 @@ async function withAssetUrls(view: GalleryView): Promise<GalleryView> {
           ...artifact,
           assetUrl:
             artifact.localFilePath && artifact.status === "finished"
-              ? convertFileSrc(artifact.localFilePath)
+              ? convertFileSrc(stripWindowsVerbatimPrefix(artifact.localFilePath))
               : artifact.assetUrl,
+          pdfAssetUrl:
+            artifact.pdfLocalFilePath && artifact.status === "finished"
+              ? convertFileSrc(stripWindowsVerbatimPrefix(artifact.pdfLocalFilePath))
+              : artifact.pdfAssetUrl,
         })),
       })),
     })),
   };
+}
+
+function stripWindowsVerbatimPrefix(path: string) {
+  if (path.startsWith("\\\\?\\")) {
+    const withoutPrefix = path.slice(4);
+    if (withoutPrefix.startsWith("UNC\\")) {
+      return `\\\\${withoutPrefix.slice(4)}`;
+    }
+    return withoutPrefix;
+  }
+  return path;
 }
