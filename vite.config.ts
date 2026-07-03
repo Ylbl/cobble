@@ -25,8 +25,14 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // Ignore Rust build output and Sidecar data directory to prevent
+      // Vite HMR from reloading the page when the backend writes files.
+      ignored: [
+        "**/src-tauri/**",
+        "**/target/**",
+        "**/*.jsonl",
+        "**/.sidecar.lock",
+      ],
     },
   },
 }));

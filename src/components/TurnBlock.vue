@@ -33,11 +33,6 @@ defineEmits<{
 </template>
 
 <style scoped>
-.turn-block {
-  margin-top: 13px;
-}
-
-.turn-body {
-  padding: 8px 0;
-}
+.turn-block { margin-top: 13px; }
+.turn-body { padding: 8px 0; }
 </style>
