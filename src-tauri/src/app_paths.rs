@@ -24,6 +24,7 @@ pub struct AppPaths {
     pub logs_dir: PathBuf,
     pub debug_artifacts_dir: PathBuf,
     pub lock_path: PathBuf,
+    pub mcp_sessions_path: PathBuf,
 }
 
 impl AppPaths {
@@ -54,6 +55,7 @@ impl AppPaths {
             logs_dir: data_dir.join("logs"),
             debug_artifacts_dir: data_dir.join("debug-artifacts"),
             lock_path: data_dir.join(".sidecar.lock"),
+            mcp_sessions_path: data_dir.join("mcp-sessions.json"),
             data_dir,
             instance_dir,
             config_path,
@@ -104,6 +106,7 @@ impl AppPaths {
             logs_dir: path_to_string(&self.logs_dir),
             debug_artifacts_dir: path_to_string(&self.debug_artifacts_dir),
             lock_path: path_to_string(&self.lock_path),
+            mcp_sessions_path: path_to_string(&self.mcp_sessions_path),
         }
     }
 }

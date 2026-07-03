@@ -81,4 +81,5 @@ pub struct SidecarConfigView {
     pub logs_dir: String,
     pub debug_artifacts_dir: String,
     pub lock_path: String,
+    pub mcp_sessions_path: String,
 }

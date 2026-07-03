@@ -579,6 +579,7 @@ name = "cobble"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "atomic-write-file",
  "axum",
  "chrono",
