@@ -59,12 +59,11 @@ function defaultConfigView(): SidecarConfigView {
   const cwd = "dev-instance";
   return {
     config: {
-      instanceName: "Sidecar",
       mcp: { host: "127.0.0.1", port: 39333 },
       latex: { engine: "xelatex", compileTimeoutSeconds: 60 },
       gallery: { defaultSidebarMode: "groups" },
-      paths: { dataDir: "./data" },
     },
+    instanceFolderName: "dev-instance",
     instanceDir: cwd,
     configPath: `${cwd}/sidecar.config.json`,
     dataDir: `${cwd}/data`,

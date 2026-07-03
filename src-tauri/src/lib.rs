@@ -18,7 +18,6 @@ pub fn run() {
     let logging_guard = logging::init(&app_paths);
     tracing::info!(
         target: "sidecar",
-        instance_name = %sidecar_config.instance_name,
         instance_dir = %app_paths.instance_dir.display(),
         config_path = %app_paths.config_path.display(),
         data_dir = %app_paths.data_dir.display(),

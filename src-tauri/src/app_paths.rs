@@ -33,7 +33,7 @@ impl AppPaths {
             .with_context(|| format!("creating {}", instance_dir.display()))?;
         let config_path = instance_dir.join("sidecar.config.json");
         let config = crate::settings::persistence::load_or_create_config(&config_path)?;
-        let paths = Self::from_config(instance_dir, config_path, &config)?;
+        let paths = Self::from_config(instance_dir, config_path)?;
         paths.create_dirs()?;
         let lock = paths.acquire_lock()?;
         Ok((paths, config, lock))
@@ -42,9 +42,8 @@ impl AppPaths {
     pub fn from_config(
         instance_dir: PathBuf,
         config_path: PathBuf,
-        config: &SidecarConfig,
     ) -> Result<Self> {
-        let data_dir = resolve_data_dir(&instance_dir, &config.paths.data_dir);
+        let data_dir = instance_dir.join("data");
         fs::create_dir_all(&data_dir)
             .with_context(|| format!("creating {}", data_dir.display()))?;
         let data_dir = normalize_path(&data_dir);
@@ -88,8 +87,14 @@ impl AppPaths {
     }
 
     pub fn to_config_view(&self, config: SidecarConfig) -> SidecarConfigView {
+        let instance_folder_name = self
+            .instance_dir
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "unknown".to_string());
         SidecarConfigView {
             config,
+            instance_folder_name,
             instance_dir: path_to_string(&self.instance_dir),
             config_path: path_to_string(&self.config_path),
             data_dir: path_to_string(&self.data_dir),
@@ -117,15 +122,6 @@ fn resolve_instance_dir() -> Result<PathBuf> {
     exe.parent()
         .map(Path::to_path_buf)
         .context("current exe has no parent directory")
-}
-
-fn resolve_data_dir(instance_dir: &Path, configured: &str) -> PathBuf {
-    let raw = PathBuf::from(configured.trim());
-    if raw.is_absolute() {
-        raw
-    } else {
-        instance_dir.join(raw)
-    }
 }
 
 fn path_to_string(path: &Path) -> String {

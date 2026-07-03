@@ -92,7 +92,6 @@ export type McpServerStatus = {
 };
 
 export type SidecarConfig = {
-  instanceName: string;
   mcp: {
     host: string;
     port: number;
@@ -104,13 +103,11 @@ export type SidecarConfig = {
   gallery: {
     defaultSidebarMode: SidebarMode;
   };
-  paths: {
-    dataDir: string;
-  };
 };
 
 export type SidecarConfigView = {
   config: SidecarConfig;
+  instanceFolderName: string;
   instanceDir: string;
   configPath: string;
   dataDir: string;

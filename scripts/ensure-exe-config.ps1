@@ -7,7 +7,6 @@ $candidateDirs = @(
 )
 
 $defaultConfig = @{
-  instanceName = "Sidecar"
   mcp = @{
     host = "127.0.0.1"
     port = 39333
@@ -18,9 +17,6 @@ $defaultConfig = @{
   }
   gallery = @{
     defaultSidebarMode = "groups"
-  }
-  paths = @{
-    dataDir = "./data"
   }
 }
 

@@ -6,17 +6,14 @@ use crate::gallery::types::SidebarMode;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SidecarConfig {
-    pub instance_name: String,
     pub mcp: McpConfig,
     pub latex: LatexConfig,
     pub gallery: GalleryConfig,
-    pub paths: PathConfig,
 }
 
 impl Default for SidecarConfig {
     fn default() -> Self {
         Self {
-            instance_name: "Sidecar".to_string(),
             mcp: McpConfig {
                 host: "127.0.0.1".to_string(),
                 port: 39333,
@@ -27,9 +24,6 @@ impl Default for SidecarConfig {
             },
             gallery: GalleryConfig {
                 default_sidebar_mode: SidebarMode::Groups,
-            },
-            paths: PathConfig {
-                data_dir: "./data".to_string(),
             },
         }
     }
@@ -55,12 +49,6 @@ pub struct GalleryConfig {
     pub default_sidebar_mode: SidebarMode,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PathConfig {
-    pub data_dir: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum LatexEngine {
@@ -83,6 +71,7 @@ impl LatexEngine {
 #[serde(rename_all = "camelCase")]
 pub struct SidecarConfigView {
     pub config: SidecarConfig,
+    pub instance_folder_name: String,
     pub instance_dir: String,
     pub config_path: String,
     pub data_dir: String,

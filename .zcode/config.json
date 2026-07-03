@@ -1,0 +1,10 @@
+{
+  "mcp": {
+    "servers": {
+      "Cobble_sidecar": {
+        "type": "http",
+        "url": "http://127.0.0.1:39333/mcp"
+      }
+    }
+  }
+}

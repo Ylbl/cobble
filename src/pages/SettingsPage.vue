@@ -40,7 +40,7 @@ async function saveSettings() {
   busy.value = true;
   try {
     configView.value = await updateSidecarConfig(configView.value);
-    message.value = "配置已保存。MCP 端口变更后需要点击 Restart MCP Server；dataDir 变更需要重启 App。";
+    message.value = "配置已保存。MCP 端口变更后需要点击 Restart MCP Server。";
   } finally {
     busy.value = false;
   }
@@ -100,8 +100,7 @@ async function runSmoke() {
 
       <main v-if="configView">
         <section v-if="activeTab === 'instance'" class="settings-section">
-          <label>Instance Name<input v-model="configView.config.instanceName" /></label>
-          <label>Data Dir<input v-model="configView.config.paths.dataDir" /></label>
+          <div class="kv"><span>Instance Folder</span><code>{{ configView.instanceFolderName }}</code></div>
           <div class="kv"><span>Instance Directory</span><code>{{ configView.instanceDir }}</code></div>
           <div class="kv"><span>Config Path</span><code>{{ configView.configPath }}</code></div>
           <div class="kv"><span>Data Directory</span><code>{{ configView.dataDir }}</code></div>
@@ -110,7 +109,7 @@ async function runSmoke() {
             <button type="button" @click="openPath(configView.configPath)">Open Config File</button>
             <button type="button" @click="openPath(configView.dataDir)">Open Data Directory</button>
           </div>
-          <p>数据目录修改后需要重启 App 生效。</p>
+          <p>当前实例由 exe 所在文件夹决定。配置文件固定为 exe 同级 sidecar.config.json。数据目录固定为 exe 同级 data/。如需创建新实例，请复制整个 Sidecar 文件夹，并修改新文件夹中的 MCP 端口。</p>
         </section>
 
         <section v-if="activeTab === 'mcp'" class="settings-section">
