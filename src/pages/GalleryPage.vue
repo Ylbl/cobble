@@ -123,8 +123,8 @@ onUnmounted(() => {
 .gallery-shell {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background:
     radial-gradient(circle at 72% 0%, rgba(245, 158, 11, 0.04), transparent 32%),
@@ -133,7 +133,7 @@ onUnmounted(() => {
 
 .empty-main {
   display: grid;
-  height: 100vh;
+  height: 100%;
   place-items: center;
   border-left: 1px solid var(--border);
   background: var(--bg);

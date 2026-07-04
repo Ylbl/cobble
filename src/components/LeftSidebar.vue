@@ -42,7 +42,7 @@ defineEmits<{
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   width: 240px;
-  height: 100vh;
+  height: 100%;
   background: var(--sidebar);
   border-right: 1px solid var(--border);
   color: var(--text);

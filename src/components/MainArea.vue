@@ -48,7 +48,7 @@ const displayTurns = computed(() => {
   display: grid;
   grid-template-rows: 44px minmax(0, 1fr);
   min-width: 0;
-  height: 100vh;
+  height: 100%;
   background: var(--bg);
 }
 
