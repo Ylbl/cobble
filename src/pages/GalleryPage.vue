@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import LeftSidebar from "../components/LeftSidebar.vue";
 import MainArea from "../components/MainArea.vue";
 import SettingsPage from "./SettingsPage.vue";
@@ -49,6 +49,7 @@ async function selectSession(sessionId: string) {
   selectedSessionId.value = sessionId;
   selectedArtifactId.value = "";
   replaceGalleryView(await selectSessionCommand(sessionId));
+  scrollToLatestTurn();
 }
 
 async function changeSidebarMode(mode: "groups" | "projects") {
@@ -61,8 +62,44 @@ async function toggleTurn(turnId: string) {
   }
 }
 
+// Track last turn id per session to detect new turns
+const lastTurnIdBySession: Record<string, string | null> = {};
+
+function scrollToLatestTurn() {
+  const session = selectedSession.value;
+  if (!session || session.turns.length === 0) return;
+  const lastTurn = session.turns[session.turns.length - 1];
+
+  // Auto-expand latest turn first, then scroll after DOM updates
+  const needsExpand = lastTurn.collapsed && lastTurnIdBySession[session.id] !== lastTurn.id;
+  lastTurnIdBySession[session.id] = lastTurn.id;
+
+  if (needsExpand) {
+    toggleTurn(lastTurn.id);
+    // toggleTurn triggers replaceGalleryView, need extra wait
+    nextTick(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => scrollTurnIntoView(lastTurn.id));
+      });
+    });
+  } else {
+    scrollTurnIntoView(lastTurn.id);
+  }
+}
+
+function scrollTurnIntoView(turnId: string) {
+  const container = document.querySelector(".content-scroll");
+  const target = document.getElementById(`turn-${turnId}`);
+  if (!container || !target) return;
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const delta = targetRect.top - containerRect.top;
+  container.scrollTop = container.scrollTop + delta - 12;
+}
+
 onMounted(async () => {
   replaceGalleryView(await listGalleryView());
+  scrollToLatestTurn();
   mcpStatus.value = await getMcpServerStatus();
   unlistenGallery = await listenGalleryUpdates(replaceGalleryView);
   unlistenMcpStatus = await listenMcpStatusUpdates((status) => {

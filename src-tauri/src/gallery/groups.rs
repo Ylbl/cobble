@@ -16,13 +16,23 @@ pub fn build_group_views(sessions: &[ArtifactSession]) -> Vec<GalleryGroupView> 
             .push(session.id.clone());
     }
 
+    // Sort session_ids within each group by session updated_at desc
+    let session_order: std::collections::HashMap<&str, usize> = sessions
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s.id.as_str(), i))
+        .collect();
+
     groups
         .into_iter()
-        .map(|(name, session_ids)| GalleryGroupView {
-            id: format!("group:{}", name),
-            name,
-            session_count: session_ids.len(),
-            session_ids,
+        .map(|(name, mut session_ids)| {
+            session_ids.sort_by_key(|id| session_order.get(id.as_str()).copied().unwrap_or(usize::MAX));
+            GalleryGroupView {
+                id: format!("group:{}", name),
+                name,
+                session_count: session_ids.len(),
+                session_ids,
+            }
         })
         .collect()
 }
@@ -31,6 +41,12 @@ pub fn build_project_views(
     sessions: &[ArtifactSession],
     codex_groups: &[CodexProjectGroup],
 ) -> Vec<GalleryProjectView> {
+    let session_order: std::collections::HashMap<&str, usize> = sessions
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s.id.as_str(), i))
+        .collect();
+
     let mut projects: BTreeMap<String, GalleryProjectView> = BTreeMap::new();
 
     for project in codex_groups {
@@ -69,7 +85,14 @@ pub fn build_project_views(
         entry.session_count = entry.session_ids.len();
     }
 
-    projects.into_values().collect()
+    // Sort session_ids within each project by session updated_at desc
+    projects
+        .into_values()
+        .map(|mut p| {
+            p.session_ids.sort_by_key(|id| session_order.get(id.as_str()).copied().unwrap_or(usize::MAX));
+            p
+        })
+        .collect()
 }
 
 pub fn normalize_group_name(value: &str) -> String {

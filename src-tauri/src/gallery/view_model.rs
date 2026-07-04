@@ -145,11 +145,18 @@ pub enum SidebarModeView {
 }
 
 pub fn to_gallery_view(
-    sessions: Vec<ArtifactSession>,
+    mut sessions: Vec<ArtifactSession>,
     selected_session_id: Option<String>,
     sidebar_mode: SidebarMode,
     codex_project_groups: Vec<CodexProjectGroup>,
 ) -> GalleryView {
+    // Sort by updated_at descending (newest first), fallback to created_at
+    sessions.sort_by(|a, b| {
+        b.updated_at
+            .cmp(&a.updated_at)
+            .then_with(|| b.created_at.cmp(&a.created_at))
+    });
+
     let selected_session_id =
         selected_session_id.or_else(|| sessions.first().map(|s| s.id.clone()));
     let groups = build_group_views(&sessions);

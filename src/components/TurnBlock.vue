@@ -16,7 +16,7 @@ defineEmits<{
 </script>
 
 <template>
-  <section class="turn-block">
+  <section class="turn-block" :id="`turn-${turn.id}`">
     <TurnHeader :turn="turn" @toggle="$emit('toggle')" />
     <div v-if="!turn.collapsed" class="turn-body">
       <ArtifactFlowLayout>
