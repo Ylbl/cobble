@@ -11,43 +11,20 @@ use crate::{
     settings::state::ConfigState,
 };
 
-const MCP_INSTRUCTIONS: &str = r#"This Sidecar App can display image artifacts and compile LaTeX artifacts into PDF.
-
-Use display_artifact_turn when the user asks to display a diagram, circuit, chemical structure, formula card, LaTeX figure, TikZ figure, image artifact, or other visual artifact.
-
-For image output, send kind = "image" and include imageUrl.
-
-For LaTeX output, send kind = "latex" and include full latexCode.
-
-The latexCode should be a complete compilable LaTeX document, not only a fragment.
-
-Prefer standalone document class for diagrams:
-\documentclass[tikz,border=6pt]{standalone}
-
-One assistant response should call display_artifact_turn once.
-
-Put all artifacts from the same assistant response into the artifacts array.
-
-If a previous tool result in this conversation contains sidecarSessionId, reuse that exact sidecarSessionId in later display_artifact_turn calls.
-
-If no sidecarSessionId exists, omit sidecarSessionId and provide a clear sessionTitle.
-
-Do not invent sidecarSessionId.
-
-The Sidecar App will compile LaTeX using its configured engine and show the resulting PDF."#;
-
 #[derive(Debug, Clone)]
 pub struct SidecarMcpService {
     app: tauri::AppHandle,
     #[allow(dead_code)]
     tool_router: ToolRouter<Self>,
+    instructions: String,
 }
 
 impl SidecarMcpService {
-    pub fn new(app: tauri::AppHandle) -> Self {
+    pub fn new(app: tauri::AppHandle, instructions: String) -> Self {
         Self {
             app,
             tool_router: Self::tool_router(),
+            instructions,
         }
     }
 }
@@ -96,6 +73,6 @@ impl SidecarMcpService {
 impl ServerHandler for SidecarMcpService {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_instructions(MCP_INSTRUCTIONS)
+            .with_instructions(self.instructions.clone())
     }
 }

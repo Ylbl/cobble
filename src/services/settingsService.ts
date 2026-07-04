@@ -25,6 +25,14 @@ export async function restartMcpServer(): Promise<McpServerStatus> {
   return invoke<McpServerStatus>("restart_mcp_server");
 }
 
+export async function stopMcpServer(): Promise<McpServerStatus> {
+  if (!isTauriRuntime()) {
+    return { running: false, status: "stopped", host: "127.0.0.1", port: 39333, url: null };
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<McpServerStatus>("stop_mcp_server");
+}
+
 export async function runLatexEnvironmentCheck(): Promise<LatexDoctorReport> {
   if (!isTauriRuntime()) {
     return {
@@ -59,7 +67,7 @@ function defaultConfigView(): SidecarConfigView {
   const cwd = "dev-instance";
   return {
     config: {
-      mcp: { host: "127.0.0.1", port: 39333 },
+      mcp: { host: "127.0.0.1", port: 39333, instructions: null },
       latex: { engine: "xelatex", compileTimeoutSeconds: 60 },
       gallery: { defaultSidebarMode: "groups" },
     },
@@ -73,5 +81,6 @@ function defaultConfigView(): SidecarConfigView {
     logsDir: `${cwd}/data/logs`,
     debugArtifactsDir: `${cwd}/data/debug-artifacts`,
     lockPath: `${cwd}/data/.sidecar.lock`,
+    mcpSessionsPath: `${cwd}/data/mcp-sessions.json`,
   };
 }

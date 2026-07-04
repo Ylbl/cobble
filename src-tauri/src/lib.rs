@@ -49,6 +49,7 @@ pub fn run() {
             commands::gallery::get_sidecar_config,
             commands::gallery::update_sidecar_config,
             commands::gallery::restart_mcp_server,
+            commands::gallery::stop_mcp_server,
             commands::gallery::open_path,
             commands::gallery::run_latex_environment_check,
             commands::gallery::run_latex_smoke_test,

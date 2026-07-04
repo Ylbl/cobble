@@ -49,6 +49,7 @@ pub enum McpRuntimeStatus {
 pub struct McpServerState {
     pub status: RwLock<McpServerStatus>,
     cancellation_token: RwLock<Option<CancellationToken>>,
+    stopped_notify: tokio::sync::Notify,
 }
 
 impl Default for McpServerState {
@@ -56,6 +57,7 @@ impl Default for McpServerState {
         Self {
             status: RwLock::new(McpServerStatus::default()),
             cancellation_token: RwLock::new(None),
+            stopped_notify: tokio::sync::Notify::new(),
         }
     }
 }
@@ -81,6 +83,21 @@ pub async fn start(app: tauri::AppHandle) -> anyhow::Result<McpServerStatus> {
 pub async fn restart(app: tauri::AppHandle) -> anyhow::Result<McpServerStatus> {
     tracing::info!(target: "sidecar", "MCP Server manual restart requested");
     start_or_restart(app, true).await
+}
+
+pub async fn stop(app: tauri::AppHandle) -> anyhow::Result<McpServerStatus> {
+    tracing::info!(target: "sidecar", "MCP Server manual stop requested");
+    stop_current(&app).await;
+    let status = McpServerStatus {
+        running: false,
+        status: McpRuntimeStatus::Stopped,
+        host: String::new(),
+        url: None,
+        port: None,
+        error_message: None,
+    };
+    set_status(&app, status.clone()).await?;
+    Ok(status)
 }
 
 async fn start_or_restart(
@@ -145,10 +162,13 @@ async fn start_or_restart(
     config.sse_keep_alive = None;
     config.cancellation_token = cancellation_token.child_token();
 
+    let instructions = app.state::<ConfigState>().get_config().await.mcp.instructions().to_string();
+
     let service = StreamableHttpService::new(
         {
             let app = app.clone();
-            move || Ok(SidecarMcpService::new(app.clone()))
+            let instructions = instructions.clone();
+            move || Ok(SidecarMcpService::new(app.clone(), instructions.clone()))
         },
         Arc::new(LocalSessionManager::default()),
         config,
@@ -177,6 +197,7 @@ async fn start_or_restart(
         }
         tracing::info!(target: "sidecar", "MCP Server stopped");
         let state = app_for_task.state::<McpServerState>();
+        state.stopped_notify.notify_waiters();
         let mut status = state.status.write().await;
         if matches!(status.status, McpRuntimeStatus::Running) {
             status.running = false;
@@ -193,6 +214,9 @@ async fn stop_current(app: &tauri::AppHandle) {
     if let Some(token) = token {
         tracing::info!(target: "sidecar", "stopping existing MCP Server");
         token.cancel();
+        // Wait for the server to actually release the port
+        state.stopped_notify.notified().await;
+        tracing::info!(target: "sidecar", "existing MCP Server fully stopped");
     }
 }
 

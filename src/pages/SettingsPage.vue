@@ -4,6 +4,7 @@ import {
   getSidecarConfig,
   openPath,
   restartMcpServer,
+  stopMcpServer,
   runLatexEnvironmentCheck,
   runLatexSmokeTest,
   updateSidecarConfig,
@@ -52,6 +53,17 @@ async function restartMcp() {
     const status = await restartMcpServer();
     emit("mcp-status", status);
     message.value = status.status === "failed" ? status.errorMessage ?? "MCP Server 启动失败" : "MCP Server 已重启";
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function stopMcp() {
+  busy.value = true;
+  try {
+    const status = await stopMcpServer();
+    emit("mcp-status", status);
+    message.value = "MCP Server 已停止";
   } finally {
     busy.value = false;
   }
@@ -115,6 +127,10 @@ async function runSmoke() {
         <section v-if="activeTab === 'mcp'" class="settings-section">
           <label>Host<input v-model="configView.config.mcp.host" /></label>
           <label>Port<input v-model.number="configView.config.mcp.port" type="number" min="1" max="65535" /></label>
+          <label>
+            MCP Instructions<span style="color:var(--subtle);font-size:10px">（发送给 AI 的提示词，留空则用默认）</span>
+            <textarea v-model="configView.config.mcp.instructions" rows="12" style="resize:vertical;min-height:120px;font-size:11px;font-family:monospace;line-height:1.4" placeholder="留空使用默认提示词（支持 image / latex / svg / pdf 等）" />
+          </label>
           <div class="kv"><span>Current MCP URL</span><code>{{ currentMcpUrl }}</code></div>
           <div class="kv"><span>MCP Status</span><strong :class="props.mcpStatus.status">{{ props.mcpStatus.status ?? (props.mcpStatus.running ? "running" : "stopped") }}</strong></div>
           <p v-if="props.mcpStatus.status === 'failed'" class="error">
@@ -123,6 +139,7 @@ async function runSmoke() {
           <div class="actions">
             <button type="button" @click="copyMcpUrl">Copy MCP URL</button>
             <button type="button" @click="restartMcp">Restart MCP Server</button>
+            <button v-if="props.mcpStatus.running" type="button" @click="stopMcp">Stop MCP</button>
           </div>
         </section>
 
@@ -166,6 +183,7 @@ async function runSmoke() {
           <div class="kv"><span>logs/</span><code>{{ configView.logsDir }}</code></div>
           <div class="kv"><span>debug-artifacts/</span><code>{{ configView.debugArtifactsDir }}</code></div>
           <div class="kv"><span>.sidecar.lock</span><code>{{ configView.lockPath }}</code></div>
+          <div class="kv"><span>mcp-sessions.json</span><code>{{ configView.mcpSessionsPath }}</code></div>
           <button type="button" @click="openPath(configView.logsDir)">Open Logs Directory</button>
           <button v-if="report?.smokeTest?.workDir" type="button" @click="openPath(report.smokeTest.workDir)">打开最近 smoke test 目录</button>
         </section>

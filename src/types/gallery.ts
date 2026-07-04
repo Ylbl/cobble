@@ -97,6 +97,7 @@ export type SidecarConfig = {
   mcp: {
     host: string;
     port: number;
+    instructions?: string | null;
   };
   latex: {
     engine: LatexEngine;
@@ -119,6 +120,7 @@ export type SidecarConfigView = {
   logsDir: string;
   debugArtifactsDir: string;
   lockPath: string;
+  mcpSessionsPath: string;
 };
 
 export type LatexEngine = "pdflatex" | "xelatex" | "lualatex";

@@ -1,4 +1,4 @@
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 use crate::{
     app_paths::AppPaths,
@@ -89,6 +89,13 @@ pub async fn update_sidecar_config(
     if let Err(error) = app_handle.emit("config-updated", view.clone()) {
         tracing::error!(target: "sidecar", ?error, "failed to emit config-updated");
     }
+    // Auto-restart MCP server so clients reinitialize with new instructions.
+    // Clear session store first so old sessions (which have stale instructions) are not recovered.
+    let app_paths = app_handle.state::<AppPaths>();
+    let _ = tokio::fs::remove_file(&app_paths.mcp_sessions_path).await;
+    if let Err(error) = http_server::restart(app_handle).await {
+        tracing::warn!(target: "sidecar", ?error, "auto-restart of MCP server after config save failed");
+    }
     Ok(view)
 }
 
@@ -100,6 +107,16 @@ pub async fn restart_mcp_server(
 ) -> Result<McpServerStatus, String> {
     tracing::debug!(target: "sidecar", "restart_mcp_server command");
     http_server::restart(app_handle)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn stop_mcp_server(
+    app_handle: tauri::AppHandle,
+) -> Result<McpServerStatus, String> {
+    tracing::debug!(target: "sidecar", "stop_mcp_server command");
+    http_server::stop(app_handle)
         .await
         .map_err(|error| error.to_string())
 }
