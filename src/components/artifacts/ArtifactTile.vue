@@ -120,14 +120,19 @@ watch(flowWidth, () => {
 });
 
 function onWheel(event: WheelEvent) {
-  event.preventDefault();
   const step = 40;
   const direction = event.deltaY < 0 ? 1 : -1;
   const baseWidth = getBaseWidth(layoutSize.value);
   const currentWidth = getCurrentWidth();
   const maxWidth = getMaxWidthInRow();
   const nextWidth = clamp(currentWidth + direction * step, baseWidth, Math.max(baseWidth, maxWidth));
-  setCurrentWidth(nextWidth);
+
+  // Only consume the event if the zoom actually changed
+  if (nextWidth !== currentWidth) {
+    event.preventDefault();
+    event.stopPropagation();
+    setCurrentWidth(nextWidth);
+  }
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -186,7 +191,7 @@ function parentPath(path: string) {
     @click="$emit('select')"
     @keydown.enter="$emit('select')"
     @contextmenu.prevent="openContextMenu"
-    @wheel.prevent="onWheel"
+    @wheel="onWheel"
   >
     <div class="tile-surface">
       <!-- Image -->

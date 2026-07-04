@@ -48,14 +48,17 @@ const displayTurns = computed(() => {
   display: grid;
   grid-template-rows: 44px minmax(0, 1fr);
   min-width: 0;
-  height: 100%;
+  min-height: 0;
+  height: 100vh;
   background: var(--bg);
 }
 
 .content-scroll {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 34px 28px;
+  overflow-x: hidden;
+  padding: 16px 34px 80px;
 }
 
 .content-scroll::-webkit-scrollbar {

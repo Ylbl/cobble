@@ -1,68 +1,26 @@
 <script setup lang="ts">
 import GalleryPage from "./pages/GalleryPage.vue";
+
+async function getWindow() {
+  if (!("__TAURI_INTERNALS__" in window)) return null;
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  return getCurrentWindow();
+}
+async function minimize() { (await getWindow())?.minimize(); }
+async function toggleMaximize() { (await getWindow())?.toggleMaximize(); }
+async function closeWindow() { (await getWindow())?.close(); }
 </script>
 
 <template>
-  <div class="app-shell">
-    <header class="app-titlebar" data-tauri-drag-region @dblclick="toggleMaximize">
-      <span class="titlebar-brand" data-tauri-drag-region>Cobble</span>
-      <div class="titlebar-spacer" data-tauri-drag-region />
-      <div class="window-controls">
-        <button type="button" @click="minimize">−</button>
-        <button type="button" @click="toggleMaximize">□</button>
-        <button type="button" class="close" @click="close">×</button>
-      </div>
-    </header>
-    <div class="app-body">
-      <GalleryPage />
-    </div>
+  <div class="window-buttons">
+    <button type="button" title="最小化" @click="minimize">−</button>
+    <button type="button" title="最大化" @click="toggleMaximize">□</button>
+    <button type="button" title="关闭" @click="closeWindow">×</button>
   </div>
+  <GalleryPage />
 </template>
 
-<script lang="ts">
-let win: any = null;
-
-async function getWin() {
-  if (win) return win;
-  if (!("__TAURI_INTERNALS__" in window)) return null;
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  win = getCurrentWindow();
-  return win;
-}
-
-async function minimize() {
-  (await getWin())?.minimize();
-}
-
-async function toggleMaximize(e?: MouseEvent) {
-  if (e) {
-    const t = e.target as HTMLElement;
-    if (t.closest(".window-controls")) return;
-  }
-  (await getWin())?.toggleMaximize();
-}
-
-async function close() {
-  (await getWin())?.close();
-}
-</script>
-
 <style>
-html, body, #app {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  overflow: hidden;
-}
-
-body {
-  min-width: 960px;
-}
-
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #f4f4f5;
@@ -87,53 +45,40 @@ body {
   --ok: #22c55e;
 }
 
-.app-shell {
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
+* {
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
   overflow: hidden;
-  background: var(--bg);
 }
 
-.app-titlebar {
-  height: 36px;
-  min-height: 36px;
-  flex: 0 0 36px;
-  display: flex;
-  align-items: center;
-  background: #111111;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  user-select: none;
+body {
+  min-width: 960px;
+}
+
+button {
+  font: inherit;
+}
+
+.window-buttons {
+  position: fixed;
+  top: 0;
+  right: 0;
   z-index: 100;
-}
-
-.titlebar-brand {
-  font-size: 12px;
-  font-weight: 600;
-  color: #e8e8e8;
-  padding-left: 10px;
-  white-space: nowrap;
-}
-
-.titlebar-spacer {
-  flex: 1;
-  height: 100%;
-}
-
-.window-controls {
-  height: 100%;
   display: flex;
-  align-items: stretch;
-  flex: 0 0 auto;
+  height: 36px;
 }
 
-.window-controls button {
-  width: 46px;
+.window-buttons button {
+  width: 42px;
   height: 100%;
   border: none;
   background: transparent;
-  color: #d4d4d4;
+  color: #a1a1aa;
   font-size: 13px;
   line-height: 1;
   display: grid;
@@ -141,19 +86,13 @@ body {
   cursor: default;
 }
 
-.window-controls button:hover {
-  background: rgba(255, 255, 255, 0.1);
+.window-buttons button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e4e4e7;
 }
 
-.window-controls button.close:hover {
+.window-buttons button:last-child:hover {
   background: #e81123;
   color: white;
-}
-
-.app-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  overflow: hidden;
 }
 </style>
