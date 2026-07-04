@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import SessionHeader from "./SessionHeader.vue";
 import TurnBlock from "./TurnBlock.vue";
 import type { Session } from "../types/gallery";
 
-defineProps<{
+const props = defineProps<{
   session: Session;
   selectedArtifactId: string;
 }>();
@@ -12,6 +13,16 @@ defineEmits<{
   "toggle-turn": [turnId: string];
   "select-artifact": [artifactId: string];
 }>();
+
+// Display turns in reverse order: latest first
+const displayTurns = computed(() => {
+  return [...props.session.turns].sort((a, b) => {
+    const ai = Number(a.index ?? 0);
+    const bi = Number(b.index ?? 0);
+    if (ai !== bi) return bi - ai;
+    return new Date(b.createdAt ?? "").getTime() - new Date(a.createdAt ?? "").getTime();
+  });
+});
 </script>
 
 <template>
@@ -19,7 +30,7 @@ defineEmits<{
     <SessionHeader :session="session" />
     <section class="content-scroll">
       <TurnBlock
-        v-for="turn in session.turns"
+        v-for="turn in displayTurns"
         :key="turn.id"
         :turn="turn"
         :selected-artifact-id="selectedArtifactId"
