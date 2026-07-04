@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import SidebarTopActions from "./SidebarTopActions.vue";
 import SessionList from "./SessionList.vue";
-import type { GalleryView, SidebarMode } from "../types/gallery";
+import type { GalleryView, McpServerStatus, SidebarMode } from "../types/gallery";
 
 defineProps<{
   galleryView: GalleryView;
   selectedSessionId: string;
+  mcpStatus: McpServerStatus;
 }>();
 
 defineEmits<{
@@ -25,9 +26,9 @@ defineEmits<{
       @select-session="$emit('select-session', $event)"
     />
     <div class="sidebar-bottom">
-      <div class="user-badge" aria-label="Current user">
-        <span class="avatar">O</span>
-        <span class="user-name">ocmvnmqz</span>
+      <div class="mcp-status" :title="mcpStatus.url ?? ''">
+        <span class="status-dot" :class="mcpStatus.status"></span>
+        <span class="status-label">MCP {{ mcpStatus.running ? 'Running' : mcpStatus.status === 'failed' ? 'Failed' : 'Stopped' }}</span>
       </div>
       <button class="icon-button" type="button" title="设置" @click="$emit('open-settings')">⚙</button>
     </div>
@@ -54,26 +55,35 @@ defineEmits<{
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.user-badge {
+.mcp-status {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
+  cursor: default;
 }
 
-.avatar {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border-radius: 50%;
-  background: #111111;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: var(--subtle);
 }
 
-.user-name {
+.status-dot.running {
+  background: var(--ok);
+}
+
+.status-dot.failed {
+  background: var(--danger);
+}
+
+.status-dot.stopped {
+  background: var(--subtle);
+}
+
+.status-label {
   overflow: hidden;
   color: #d4d4d8;
   font-size: 12px;

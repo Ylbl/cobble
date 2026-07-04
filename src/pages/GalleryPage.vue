@@ -81,6 +81,7 @@ onUnmounted(() => {
     <LeftSidebar
       :gallery-view="galleryView"
       :selected-session-id="selectedSessionId"
+      :mcp-status="mcpStatus"
       @set-sidebar-mode="changeSidebarMode"
       @select-session="selectSession"
       @open-settings="settingsOpen = true"
@@ -88,7 +89,6 @@ onUnmounted(() => {
     <MainArea
       v-if="selectedSession"
       :session="selectedSession"
-      :mcp-status="mcpStatus"
       :selected-artifact-id="selectedArtifactId"
       @toggle-turn="toggleTurn"
       @select-artifact="selectedArtifactId = $event"

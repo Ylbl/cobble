@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import type { McpServerStatus, Session } from "../types/gallery";
+import type { Session } from "../types/gallery";
 
 defineProps<{
   session: Session;
-  mcpStatus: McpServerStatus;
 }>();
 
 type AppWindow = {
@@ -18,52 +17,27 @@ function isTauriRuntime() {
 }
 
 async function getAppWindow(): Promise<AppWindow | null> {
-  if (!isTauriRuntime()) {
-    return null;
-  }
-
+  if (!isTauriRuntime()) return null;
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   return getCurrentWindow();
 }
 
 async function minimizeWindow() {
   const appWindow = await getAppWindow();
-  if (!appWindow) {
-    return;
-  }
-
-  await appWindow.minimize();
+  if (appWindow) await appWindow.minimize();
 }
-
 async function toggleMaximizeWindow() {
   const appWindow = await getAppWindow();
-  if (!appWindow) {
-    return;
-  }
-
-  await appWindow.toggleMaximize();
+  if (appWindow) await appWindow.toggleMaximize();
 }
-
 async function closeWindow() {
   const appWindow = await getAppWindow();
-  if (!appWindow) {
-    return;
-  }
-
-  await appWindow.close();
+  if (appWindow) await appWindow.close();
 }
-
 async function startWindowDrag(event: PointerEvent) {
-  if (event.button !== 0) {
-    return;
-  }
-
+  if (event.button !== 0) return;
   const appWindow = await getAppWindow();
-  if (!appWindow) {
-    return;
-  }
-
-  await appWindow.startDragging();
+  if (appWindow) await appWindow.startDragging();
 }
 </script>
 
@@ -71,21 +45,10 @@ async function startWindowDrag(event: PointerEvent) {
   <header class="session-header" @pointerdown="startWindowDrag" @dblclick="toggleMaximizeWindow">
     <div class="title-box">
       <span class="session-title">{{ session.title }}</span>
-      <span class="project-badge">▱ {{ session.projectName }}</span>
-      <button class="more" type="button" title="更多" @pointerdown.stop @dblclick.stop>…</button>
-    </div>
-    <div class="mcp-status">
-      <span class="mcp-dot" :class="{ running: mcpStatus.running }"></span>
-      <span>MCP: {{ mcpStatus.running ? "Running" : "Offline" }}</span>
-      <span v-if="mcpStatus.url" class="mcp-url">{{ mcpStatus.url }}</span>
     </div>
     <div class="window-actions" aria-label="Window actions">
-      <button type="button" title="最小化" @pointerdown.stop @dblclick.stop @click="minimizeWindow">
-        −
-      </button>
-      <button type="button" title="最大化" @pointerdown.stop @dblclick.stop @click="toggleMaximizeWindow">
-        □
-      </button>
+      <button type="button" title="最小化" @pointerdown.stop @dblclick.stop @click="minimizeWindow">−</button>
+      <button type="button" title="最大化" @pointerdown.stop @dblclick.stop @click="toggleMaximizeWindow">□</button>
       <button type="button" title="关闭" @pointerdown.stop @dblclick.stop @click="closeWindow">×</button>
     </div>
   </header>
@@ -126,62 +89,6 @@ async function startWindowDrag(event: PointerEvent) {
   white-space: nowrap;
 }
 
-.project-badge {
-  overflow: hidden;
-  max-width: 170px;
-  padding: 2px 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  background: #222222;
-  color: #b7b7bd;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mcp-status {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-  margin-left: 10px;
-  margin-right: auto;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.mcp-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--subtle);
-}
-
-.mcp-dot.running {
-  background: var(--ok);
-}
-
-.mcp-url {
-  overflow: hidden;
-  max-width: 280px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.more,
-.window-actions button {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.more {
-  width: 20px;
-  height: 20px;
-  padding: 0;
-}
-
 .window-actions {
   display: flex;
   align-items: center;
@@ -194,7 +101,11 @@ async function startWindowDrag(event: PointerEvent) {
   width: 24px;
   height: 24px;
   place-items: center;
+  border: 0;
   border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
   font-size: 12px;
 }
 
@@ -202,5 +113,4 @@ async function startWindowDrag(event: PointerEvent) {
   background: rgba(255, 255, 255, 0.07);
   color: #ffffff;
 }
-
 </style>

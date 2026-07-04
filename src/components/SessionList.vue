@@ -60,7 +60,6 @@ const sections = computed(() => {
           @click="$emit('select-session', session.id)"
         />
       </template>
-      <button class="show-more" type="button">显示更多</button>
     </nav>
   </div>
 </template>
@@ -123,17 +122,5 @@ const sections = computed(() => {
 .session-list::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.14);
-}
-
-.show-more {
-  width: 100%;
-  height: 27px;
-  padding-left: 24px;
-  border: 0;
-  background: transparent;
-  color: #6f6f76;
-  cursor: pointer;
-  font-size: 12px;
-  text-align: left;
 }
 </style>

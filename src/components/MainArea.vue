@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import SessionHeader from "./SessionHeader.vue";
-import SessionMeta from "./SessionMeta.vue";
 import TurnBlock from "./TurnBlock.vue";
-import type { McpServerStatus, Session } from "../types/gallery";
+import type { Session } from "../types/gallery";
 
 defineProps<{
   session: Session;
-  mcpStatus: McpServerStatus;
   selectedArtifactId: string;
 }>();
 
@@ -18,9 +16,8 @@ defineEmits<{
 
 <template>
   <main class="main-area">
-    <SessionHeader :session="session" :mcp-status="mcpStatus" />
+    <SessionHeader :session="session" />
     <section class="content-scroll">
-      <SessionMeta :session="session" />
       <TurnBlock
         v-for="turn in session.turns"
         :key="turn.id"
