@@ -10,6 +10,8 @@ import {
   selectSession as selectSessionCommand,
   setSidebarMode,
   toggleTurnCollapsed,
+  deleteGallerySession,
+  deleteGalleryTurn,
 } from "../services/galleryService";
 import type { GalleryView, McpServerStatus } from "../types/gallery";
 
@@ -60,6 +62,16 @@ async function toggleTurn(turnId: string) {
   }
 }
 
+async function deleteSession(sessionId: string) {
+  replaceGalleryView(await deleteGallerySession(sessionId));
+}
+
+async function deleteTurn(turnId: string) {
+  if (selectedSession.value) {
+    replaceGalleryView(await deleteGalleryTurn(selectedSession.value.id, turnId));
+  }
+}
+
 onMounted(async () => {
   replaceGalleryView(await listGalleryView());
   mcpStatus.value = await getMcpServerStatus();
@@ -83,6 +95,7 @@ onUnmounted(() => {
       :mcp-status="mcpStatus"
       @set-sidebar-mode="changeSidebarMode"
       @select-session="selectSession"
+      @delete-session="deleteSession"
       @open-settings="settingsOpen = true"
     />
     <MainArea
@@ -91,6 +104,7 @@ onUnmounted(() => {
       :selected-artifact-id="selectedArtifactId"
       @toggle-turn="toggleTurn"
       @select-artifact="selectedArtifactId = $event"
+      @delete-turn="deleteTurn"
     />
     <main v-else class="empty-main">
       <div class="empty-state">暂无 artifact session</div>

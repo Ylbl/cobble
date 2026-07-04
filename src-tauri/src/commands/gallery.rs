@@ -161,3 +161,22 @@ pub async fn run_latex_smoke_test(
     }
     Ok(view)
 }
+
+#[tauri::command]
+pub async fn delete_gallery_session(
+    state: State<'_, GalleryState>,
+    session_id: String,
+) -> Result<GalleryView, String> {
+    tracing::info!(target: "sidecar", %session_id, "delete_gallery_session command");
+    state.delete_session(session_id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_gallery_turn(
+    state: State<'_, GalleryState>,
+    session_id: String,
+    turn_id: String,
+) -> Result<GalleryView, String> {
+    tracing::info!(target: "sidecar", %session_id, %turn_id, "delete_gallery_turn command");
+    state.delete_turn(session_id, turn_id).await.map_err(|e| e.to_string())
+}

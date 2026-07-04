@@ -12,6 +12,7 @@ defineProps<{
 defineEmits<{
   "set-sidebar-mode": [mode: SidebarMode];
   "select-session": [sessionId: string];
+  "delete-session": [sessionId: string];
   "open-settings": [];
 }>();
 </script>
@@ -24,6 +25,7 @@ defineEmits<{
       :selected-session-id="selectedSessionId"
       @set-sidebar-mode="$emit('set-sidebar-mode', $event)"
       @select-session="$emit('select-session', $event)"
+      @delete-session="$emit('delete-session', $event)"
     />
     <div class="sidebar-bottom">
       <div class="mcp-status" :title="mcpStatus.url ?? ''">

@@ -177,6 +177,79 @@ impl GalleryState {
         Ok(self.list_view().await)
     }
 
+    pub async fn delete_session(&self, session_id: String) -> Result<GalleryView> {
+        let (_removed, artifact_paths) = {
+            let mut sessions = self.sessions.write().await;
+            let pos = sessions.iter().position(|s| s.id == session_id);
+            let Some(pos) = pos else {
+                anyhow::bail!("Session not found");
+            };
+            let removed = sessions.remove(pos);
+            let paths: Vec<std::path::PathBuf> = removed
+                .turns
+                .iter()
+                .flat_map(|t| t.artifacts.iter())
+                .map(|a| self.app_paths.artifacts_dir.join(&a.id))
+                .collect();
+            (removed, paths)
+        };
+
+        // Update selected session if needed
+        {
+            let sessions = self.sessions.read().await;
+            let mut selected = self.selected_session_id.write().await;
+            if selected.as_deref() == Some(&session_id) {
+                *selected = sessions.iter().max_by_key(|s| &s.updated_at).map(|s| s.id.clone());
+            }
+        }
+
+        self.persist_current("gallery_state_saved").await?;
+
+        // Clean up artifact files
+        let artifacts_root = self.app_paths.artifacts_dir.canonicalize().unwrap_or_default();
+        for path in &artifact_paths {
+            if let Ok(canonical) = path.canonicalize() {
+                if canonical.starts_with(&artifacts_root) {
+                    let _ = std::fs::remove_dir_all(&canonical);
+                }
+            }
+        }
+
+        tracing::info!(target: "sidecar", %session_id, "session deleted");
+        Ok(self.list_view().await)
+    }
+
+    pub async fn delete_turn(&self, session_id: String, turn_id: String) -> Result<GalleryView> {
+        let artifact_paths = {
+            let mut sessions = self.sessions.write().await;
+            let session = sessions
+                .iter_mut()
+                .find(|s| s.id == session_id)
+                .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
+            let pos = session.turns.iter().position(|t| t.id == turn_id)
+                .ok_or_else(|| anyhow::anyhow!("Turn not found"))?;
+            let removed = session.turns.remove(pos);
+            session.updated_at = chrono::Utc::now().to_rfc3339();
+            removed.artifacts.iter()
+                .map(|a| self.app_paths.artifacts_dir.join(&a.id))
+                .collect::<Vec<_>>()
+        };
+
+        self.persist_current("gallery_state_saved").await?;
+
+        let artifacts_root = self.app_paths.artifacts_dir.canonicalize().unwrap_or_default();
+        for path in &artifact_paths {
+            if let Ok(canonical) = path.canonicalize() {
+                if canonical.starts_with(&artifacts_root) {
+                    let _ = std::fs::remove_dir_all(&canonical);
+                }
+            }
+        }
+
+        tracing::info!(target: "sidecar", %session_id, %turn_id, "turn deleted");
+        Ok(self.list_view().await)
+    }
+
     pub async fn record_latex_smoke_test(
         &self,
         compile_result: LatexCompileResult,

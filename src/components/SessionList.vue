@@ -11,6 +11,7 @@ const props = defineProps<{
 defineEmits<{
   "set-sidebar-mode": [mode: SidebarMode];
   "select-session": [sessionId: string];
+  "delete-session": [sessionId: string];
 }>();
 
 const sessionById = computed(() => new Map(props.galleryView.sessions.map((session) => [session.id, session])));
@@ -58,6 +59,7 @@ const sections = computed(() => {
           :session="session"
           :active="session.id === selectedSessionId"
           @click="$emit('select-session', session.id)"
+          @delete-session="$emit('delete-session', $event)"
         />
       </template>
     </nav>

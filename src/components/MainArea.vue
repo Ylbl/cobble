@@ -12,6 +12,7 @@ const props = defineProps<{
 defineEmits<{
   "toggle-turn": [turnId: string];
   "select-artifact": [artifactId: string];
+  "delete-turn": [turnId: string];
 }>();
 
 // Display turns in reverse order: latest first
@@ -36,6 +37,7 @@ const displayTurns = computed(() => {
         :selected-artifact-id="selectedArtifactId"
         @toggle="$emit('toggle-turn', turn.id)"
         @select-artifact="$emit('select-artifact', $event)"
+        @delete-turn="$emit('delete-turn', turn.id)"
       />
     </section>
   </main>

@@ -38,6 +38,16 @@ export async function toggleTurnCollapsed(sessionId: string, turnId: string): Pr
   return withAssetUrls(await invoke<GalleryView>("toggle_turn_collapsed", { sessionId, turnId }));
 }
 
+export async function deleteGallerySession(sessionId: string): Promise<GalleryView> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return withAssetUrls(await invoke<GalleryView>("delete_gallery_session", { sessionId }));
+}
+
+export async function deleteGalleryTurn(sessionId: string, turnId: string): Promise<GalleryView> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return withAssetUrls(await invoke<GalleryView>("delete_gallery_turn", { sessionId, turnId }));
+}
+
 export async function listenGalleryUpdates(onUpdate: (view: GalleryView) => void) {
   if (!isTauriRuntime()) {
     return () => {};

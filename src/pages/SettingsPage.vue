@@ -243,6 +243,18 @@ h1, h2 { margin: 0; font-size: 14px; }
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow-y: auto;
+}
+
+.settings-nav::-webkit-scrollbar {
+  width: 4px;
+}
+.settings-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.settings-nav::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.10);
 }
 
 .settings-nav button {
@@ -273,6 +285,19 @@ h1, h2 { margin: 0; font-size: 14px; }
   min-width: 0;
   padding: 14px;
   overflow-y: auto;
+}
+
+.settings-main::-webkit-scrollbar {
+  width: 6px;
+}
+
+.settings-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-main::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.13);
 }
 
 .settings-section {
@@ -312,6 +337,17 @@ textarea {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 11px;
   line-height: 1.45;
+}
+
+textarea::-webkit-scrollbar {
+  width: 8px;
+}
+textarea::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+textarea::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.13);
 }
 
 input:focus, textarea:focus, select:focus {
@@ -363,4 +399,10 @@ p {
 
 .error, .failed, .missing { color: #f87171; }
 .running, .found { color: #86efac; }
+</style>
+
+<style>
+.settings-panel textarea::-webkit-scrollbar { width: 8px; }
+.settings-panel textarea::-webkit-scrollbar-track { background: #1a1a1a; }
+.settings-panel textarea::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(255, 255, 255, 0.13); }
 </style>

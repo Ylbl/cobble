@@ -39,6 +39,7 @@ pub fn run() {
         .manage(config_state)
         .manage(gallery_state)
         .manage(mcp::http_server::McpServerState::default())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::gallery::list_gallery_view,
@@ -50,6 +51,8 @@ pub fn run() {
             commands::gallery::update_sidecar_config,
             commands::gallery::restart_mcp_server,
             commands::gallery::stop_mcp_server,
+            commands::gallery::delete_gallery_session,
+            commands::gallery::delete_gallery_turn,
             commands::gallery::open_path,
             commands::gallery::run_latex_environment_check,
             commands::gallery::run_latex_smoke_test,
