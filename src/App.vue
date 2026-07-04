@@ -12,6 +12,7 @@ async function closeWindow() { (await getWindow())?.close(); }
 </script>
 
 <template>
+  <div class="drag-handle" data-tauri-drag-region />
   <div class="window-buttons">
     <button type="button" title="最小化" @click="minimize">−</button>
     <button type="button" title="最大化" @click="toggleMaximize">□</button>
@@ -62,6 +63,15 @@ body {
 
 button {
   font: inherit;
+}
+
+.drag-handle {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 140px;
+  height: 36px;
+  z-index: 99;
 }
 
 .window-buttons {

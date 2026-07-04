@@ -1,5 +1,5 @@
 <template>
-  <div class="sidebar-top-actions">
+  <div class="sidebar-top-actions" data-tauri-drag-region>
     <div class="brand-row">
       <span class="app-mark">⊞</span>
     </div>
@@ -10,6 +10,8 @@
 .sidebar-top-actions {
   padding: 8px 10px 6px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 30px;
+  cursor: default;
 }
 
 .brand-row {

@@ -7,7 +7,7 @@ defineProps<{
 </script>
 
 <template>
-  <header class="session-header">
+  <header class="session-header" data-tauri-drag-region>
     <div class="title-box">
       <span class="session-title">{{ session.title }}</span>
     </div>
